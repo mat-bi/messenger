@@ -1,9 +1,36 @@
-class DTO:
+from abc import ABC, abstractproperty
+
+
+class NoFieldsField(Exception):
+    pass
+
+
+class DTO(ABC):
+
+    @abstractproperty
+    def fields(self):
+        pass
+
     def __init__(self, *args, **kwargs):
         self.__dict__.update(kwargs)
 
+    def __eq__(self, other):
+        if isinstance(other, self.__class__) is False:
+            return False
+
+        for field in self.fields:
+            if getattr(self, field) != getattr(other, field):
+                return False
+        return True
+
+
 class Message(DTO):
-    pass
+    fields = [
+        'id_message', 'content', 'creation_date'
+    ]
+
 
 class User(DTO):
-    pass
+    fields = [
+        'id_user', 'password'
+    ]

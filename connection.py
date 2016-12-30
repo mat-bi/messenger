@@ -158,7 +158,7 @@ class DBConnection(Connection):
 
     def __init__(self, db='db'):
         super(DBConnection, self).__init__()
-        self._db = sqlite3.connect(database=db)
+        self._db = sqlite3.connect(database=db, detect_types=sqlite3.PARSE_DECLTYPES)
         self._cursor = None
 
     @no_transaction
@@ -190,10 +190,13 @@ class DBConnection(Connection):
         self._savepoints.append(name)
         self._cursor.execute("SAVEPOINT {};".format(name))
 
-    def begin_transaction(self):
+    def begin_transaction(self, exclusive=False):
         super().begin_transaction()
         self._cursor = self._db.cursor()
-        self._cursor.execute("BEGIN TRANSACTION;")
+        if exclusive is False:
+            self._cursor.execute("BEGIN TRANSACTION;")
+        else:
+            self._cursor.execute("BEGIN EXCLUSIVE TRANSACTION;")
 
     def __del__(self):
         self._db.close()
@@ -213,12 +216,14 @@ class NotAConnection(Exception):
 
 
 def transaction(func):
-    def func_wrapper(conn, *args, **kwargs):
+    def func_wrapper(*args, **kwargs):
+        conn = kwargs.get("conn")
         if conn is None:
             with ConnectionPool.get_connection() as conn:
-                f = func(conn=conn, *args, **kwargs)
+                kwargs.update(dict(conn=conn))
+                f = func(*args, **kwargs)
         else:
-            f = func(conn=conn, *args, **kwargs)
+            f = func(*args, **kwargs)
         return f
 
     return func_wrapper
@@ -229,13 +234,13 @@ class ConnectionPool:
     _cond_var = threading.Condition()  # conditional variable to synchronize threads in a queue
 
     @staticmethod
-    def get_connection(db=None):  # returns a connection from the pool
+    def get_connection():  # returns a connection from the pool
         with ConnectionPool._cond_var:  # gets a mutex
             if ConnectionPool._connections["available"] > 0:  # if any connection is available
                 ConnectionPool._connections["available"] -= 1  # decreases the number of available connections
                 if len(ConnectionPool._connections[
                            "connections"]) is 0:  # if connections are available, but there isn't any created
-                    return ConnectionFactory.get_connection(db=db)  # returns a new connection
+                    return ConnectionFactory.get_connection()  # returns a new connection
                 else:  # if connection array is not empty
                     return ConnectionPool._connections["connections"].pop()  # returns one of the available
             else:  # no connections available
