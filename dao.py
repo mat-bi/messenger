@@ -33,8 +33,9 @@ class DAO(ABC):
 class MessageDAO(DAO):
     @staticmethod
     def _create_message(message, conn):
-        return Message(id_message=message[0], content=message[1], creation_date=message[2],
-                       id_user=DBObject(func=UserDAO.get_user, login=message[3], conn=conn))
+        import datetime
+        return Message(id_message=message[0], content=message[1], creation_date=datetime.datetime.fromtimestamp(message[2]),
+                       user=DBObject(func=UserDAO.get_user, login=message[3], conn=conn))
 
     @staticmethod
     @transaction
@@ -82,15 +83,16 @@ class UserDAO(DAO):
             return UserDAO._create_user(user=user)
 
     @staticmethod
-    @transaction
     def register(login, password, conn=None):
-        conn.exec("BEGIN EXCLUSIVE;")
+        conn.begin_transaction(exclusive=True)
         user = conn.exec(query="SELECT login,password FROM User WHERE login=?;", params=(login,), opts=FetchOne)
         if user is None:
             user = UserDAO._create_user(user=(login,password))
             conn.exec("INSERT INTO User(login, password) VALUES (?,?);", params=(login, password), opts=InsertOne)
+            conn.commit()
             return user
         else:
+            conn.commit()
             return None
 
     @staticmethod

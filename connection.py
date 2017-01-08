@@ -113,27 +113,27 @@ class NoExecObject(Exception):
 
 class ExecCommand(ABC):
     @abstractmethod
-    def exec(self, cursor):
+    def exec(self, cursor, conn):
         pass
 
 
 class FetchAll(ExecCommand):
-    def exec(self, cursor):
+    def exec(self, cursor,conn):
         return cursor.fetchall()
 
 
 class FetchOne(ExecCommand):
-    def exec(self, cursor):
+    def exec(self, cursor,conn):
         return cursor.fetchone()
 
 
 class FetchNone(ExecCommand):
-    def exec(self, cursor):
+    def exec(self, cursor,conn):
         return None
 
 class InsertOne(ExecCommand):
-    def exec(self, cursor):
-        return cursor.lastrowid
+    def exec(self, cursor,conn):
+        return cursor.getconnection().last_insert_rowid()
 
 
 def no_transaction(func):
@@ -145,7 +145,7 @@ def no_transaction(func):
 
     return func_wrapper
 
-
+import apsw
 class DBConnection(Connection):
     @no_transaction
     def rollback(self, name=None):
@@ -158,7 +158,7 @@ class DBConnection(Connection):
 
     def __init__(self, db='db'):
         super(DBConnection, self).__init__()
-        self._db = sqlite3.connect(database=db, detect_types=sqlite3.PARSE_DECLTYPES)
+        self._db = apsw.Connection(db)
         self._cursor = None
 
     @no_transaction
@@ -173,15 +173,20 @@ class DBConnection(Connection):
         if params is None:
             self._cursor.execute(query)
         else:
-            self._cursor.execute(query, params)
+            import datetime
+            _params = params
+            for idx, param in enumerate(params):
+                if isinstance(param, datetime.datetime):
+                    _params = _params[0:idx]+(_params[idx].timestamp(),)+_params[idx+1:len(_params)]
+            self._cursor.execute(query, _params)
         if isinstance(opts, ExecCommand) is False:  # if the opts provided wasn't an instance, but a class
             opts = opts()  # creates an instance
-        return opts.exec(self._cursor)  # returns the selected option
+        return opts.exec(cursor=self._cursor,conn=self._db)  # returns the selected option
 
     @no_transaction
     def commit(self):
         super().commit()
-        self._db.commit()
+        self._cursor.execute("COMMIT")
         self._cursor = None
 
     @no_transaction
@@ -215,7 +220,7 @@ class NotAConnection(Exception):
     pass
 
 
-def transaction(func):
+def transaction(func, exclusive=False):
     def func_wrapper(*args, **kwargs):
         conn = kwargs.get("conn")
         if conn is None:

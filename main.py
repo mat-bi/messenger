@@ -5,8 +5,10 @@ import enum
 import threading
 from abc import ABC, abstractmethod
 
+
 class InvalidMessage(Exception):
     pass
+
 
 class MessageParser:
     @staticmethod
@@ -22,7 +24,7 @@ class MessageParser:
 
     @staticmethod
     def unrecognized_message():
-        return "{}\r\n".format(json.dumps({"type": MessageTypes.UNRECOGNIZED_MESSAGE.value})).encode("utf-8")
+        return "\x00{}\xFF".format(json.dumps({"type": MessageTypes.UNRECOGNIZED_MESSAGE.value})).encode("utf-8")
 
 
 class User(ABC):
@@ -48,9 +50,10 @@ class UserLeaf(User, threading.Thread):
         for observer in self.observers:
             func(observer=observer)
 
-    def send_message(self, message,conn):
-        with self.mutex:
-            self.conn.send(message)
+    def send_message(self, message, conn):
+        if conn is not self.conn:
+            with self.mutex:
+                self.conn.send(message)
 
     def send_notification(self, notification):
         for observer in self.observers:
@@ -71,8 +74,9 @@ class UserLeaf(User, threading.Thread):
         self.addr = addr
         self.observers = []
         self.mutex = threading.RLock()
+
     def build_message(self, **kwargs):
-        return "{}\r\n".format(json.dumps(kwargs)).encode("utf-8")
+        return "\x00{}\xFF".format(json.dumps(kwargs)).encode("utf-8")
 
     def _unrecognized_message(self, conn):
         message = MessageParser.unrecognized_message()
@@ -83,12 +87,14 @@ class UserLeaf(User, threading.Thread):
             self._unrecognized_message(conn=conn)
             return False
         return True
+
     def run(self):
         with self.conn:
             conn, addr = self.conn, self.addr
             while True:  # waiting for the first message
                 data = conn.recv(SOCKET_BUFF)  # receiving json object
-                if not data:  # no data - connection is closed
+                counter = SOCKET_BUFF
+                if not data or data.decode("utf-8") == "\x00\xff":  # no data or a close request - connection is closed
                     return
                 try:
                     data = MessageParser.parse(message=data.decode("utf-8"))
@@ -100,20 +106,20 @@ class UserLeaf(User, threading.Thread):
                         if self._no_login_or_password(message=data, conn=conn):
                             user = dao.UserDAO.login(login=data['login'], password=data['password'])
                             if user is None:
-                                conn.send(self.build_message(message=MessageCodes.WRONG_CREDENTIALS.value))
+                                conn.send(self.build_message(type=MessageCodes.WRONG_CREDENTIALS.value))
                             else:
-                                conn.send(self.build_message(message=MessageCodes.LOGGED_IN.value))
+                                conn.send(self.build_message(type=MessageCodes.LOGGED_IN.value))
                                 self.login = user.login
-                                Socket().add_user(user=user, conn=conn, addr=addr)
+                                Socket().add_user(user=user, leaf=self)
                                 break
                     elif data['type'] == MessageTypes.REGISTER.value:
                         if self._no_login_or_password(message=data, conn=conn):
                             user = dao.UserDAO.register(login=data['login'], password=data['password'])
                             if user is None:
-                                conn.send(self.build_message(message=MessageCodes.LOGIN_TAKEN.value))
+                                conn.send(self.build_message(type=MessageCodes.LOGIN_TAKEN.value))
                             else:
-                                conn.send(self.build_message(message=MessageCodes.USER_REGISTERED.value))
-                                Socket().add_user(user=user, conn=conn, addr=addr)
+                                conn.send(self.build_message(type=MessageCodes.USER_REGISTERED.value))
+                                Socket().add_user(user=user, leaf=self)
                                 break
             while True:
                 data = self.conn.recv(SOCKET_BUFF).decode("utf-8")
@@ -122,12 +128,12 @@ class UserLeaf(User, threading.Thread):
                         break
                     try:
                         data = MessageParser.parse(message=data)
-                    except ValueError:
+                    except InvalidMessage:
                         self.conn.send(MessageParser.unrecognized_message())
                     else:
-                        if data['type'] == MessageTypes.INCOMING_MESSAGE:
-                            pass
-
+                        if data['type'] == MessageTypes.INCOMING_MESSAGE.value:
+                            bla = True
+                            Socket().send_message(message=self.build_message(type=MessageTypes.INCOMING_MESSAGE.value), conn=self.conn)
             Socket().remove_user(user=self, login=self.login)
 
 
@@ -159,7 +165,7 @@ class NoUser(Exception):
     pass
 
 
-SOCKET_BUFF = 1024
+SOCKET_BUFF = 4096
 
 
 class MessageTypes(enum.Enum):
@@ -203,12 +209,15 @@ class Socket(object):
             if item is None:
                 item = leaf
             elif isinstance(item, UserLeaf):
-                item = UserComposite()
-                item.add_user(user=leaf)
+                item2 = UserComposite()
+                item2.add_user(user=item)
+                item2.add_user(user=leaf)
+                item = item2
             elif isinstance(item, UserComposite):
                 item.add_user(user=leaf)
             self._users[user.login] = item
-            self._dirty.remove(leaf)
+            if leaf in self._dirty:
+                self._dirty.remove(leaf)
 
     def remove_user(self, user, login):
         with self.mutex:
@@ -222,14 +231,12 @@ class Socket(object):
 
     def send_message(self, message, conn):
         with self.mutex:
-            for user in self._users:
+            for login, user in self._users.items():
                 user.send_message(message=message, conn=conn)
-
-
 
     def handle(self):
         s = socket.socket()
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR,1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(('', 3000))
         s.listen(5)
         while True:
@@ -238,7 +245,6 @@ class Socket(object):
                 leaf = UserLeaf(conn=conn, addr=addr)
                 self._dirty.append(leaf)
                 leaf.start()
-
 
 
 if __name__ == "__main__":

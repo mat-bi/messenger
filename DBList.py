@@ -46,5 +46,5 @@ class DBObject(object):
     @fetch
     def __eq__(self, other):
         if isinstance(other, self.__class__):
-            return self._obj == other.obj
+            return self._obj == other._obj
         return self._obj == other
