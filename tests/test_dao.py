@@ -10,7 +10,7 @@ class TestDAO(TestCase):
             DAO()
 
     def test_can_instantiate_with_create_table(self):
-        def create_table(conn=None):
+        def create_table(*args, **kwargs):
             pass
         dao = type('ClassDAO', (DAO,), {'create_table': create_table})
         dao()
