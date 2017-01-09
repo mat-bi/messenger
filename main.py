@@ -1,7 +1,7 @@
 import threading, json, dao
 import socket
 import enum
-
+from dto import Message
 import threading
 from abc import ABC, abstractmethod
 
@@ -45,15 +45,18 @@ class User(ABC):
         pass
 
 
-class UserLeaf(User, threading.Thread):
+from tornado import websocket
+
+
+class UserLeaf(User, websocket.WebSocketHandler):
     def _iterate(self, func):
         for observer in self.observers:
             func(observer=observer)
 
-    def send_message(self, message, conn):
-        if conn is not self.conn:
+    def send_message(self, message, sender):
+        if sender is not self:
             with self.mutex:
-                self.conn.send(message)
+                self.write_message(message=message)
 
     def send_notification(self, notification):
         for observer in self.observers:
@@ -68,73 +71,70 @@ class UserLeaf(User, threading.Thread):
     def unregister_observer(self, observer):
         self.observers.remove(observer)
 
-    def __init__(self, conn, addr):
-        super().__init__()
-        self.conn = conn
-        self.addr = addr
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.observers = []
         self.mutex = threading.RLock()
+        self.authenticated = False
 
     def build_message(self, **kwargs):
-        return "\x00{}\xFF".format(json.dumps(kwargs)).encode("utf-8")
+        return json.dumps(kwargs)
 
-    def _unrecognized_message(self, conn):
+    def _unrecognized_message(self):
         message = MessageParser.unrecognized_message()
-        conn.send(message)
+        return message
 
-    def _no_login_or_password(self, message, conn):
+    def _no_login_or_password(self, message):
         if 'login' not in message or 'password' not in message:
-            self._unrecognized_message(conn=conn)
+            self.write_message(self._unrecognized_message())
             return False
         return True
 
-    def run(self):
-        with self.conn:
-            conn, addr = self.conn, self.addr
-            while True:  # waiting for the first message
-                data = conn.recv(SOCKET_BUFF)  # receiving json object
-                counter = SOCKET_BUFF
-                if not data or data.decode("utf-8") == "\x00\xff":  # no data or a close request - connection is closed
-                    return
-                try:
-                    data = MessageParser.parse(message=data.decode("utf-8"))
-                except InvalidMessage:
-                    self._unrecognized_message(conn=conn)
+    def on_message(self, message):
+        with self.mutex:
+            try:
+                message = MessageParser.parse(message=message)
+            except InvalidMessage:
+                self.write_message(self._unrecognized_message())
+            else:
+                if self.authenticated is False:
+                    if message['type'] == MessageTypes.LOGIN.value:
+                        if message['type'] == MessageTypes.LOGIN.value:
+                            if self._no_login_or_password(message=message):
+                                user = dao.UserDAO.login(login=message['login'], password=message['password'])
+                                if user is None:
+                                    self.write_message(self.build_message(type=MessageCodes.WRONG_CREDENTIALS.value))
+                                else:
+                                    self.write_message(self.build_message(type=MessageCodes.LOGGED_IN.value))
+                                    self.login = user.login
+                                    self.authenticated = True
+                                    Socket().add_user(user=user, leaf=self)
+                        elif message['type'] == MessageTypes.REGISTER.value:
+                            if self._no_login_or_password(message=message):
+                                user = dao.UserDAO.register(login=message['login'], password=message['password'])
+                                if user is None:
+                                    self.write_message(self.build_message(type=MessageCodes.LOGIN_TAKEN.value))
+                                else:
+                                    self.write_message(self.build_message(type=MessageCodes.USER_REGISTERED.value))
+                                    Socket().add_user(user=user, leaf=self)
                 else:
-                    a = MessageTypes.LOGIN == 0
-                    if data['type'] == MessageTypes.LOGIN.value:
-                        if self._no_login_or_password(message=data, conn=conn):
-                            user = dao.UserDAO.login(login=data['login'], password=data['password'])
-                            if user is None:
-                                conn.send(self.build_message(type=MessageCodes.WRONG_CREDENTIALS.value))
-                            else:
-                                conn.send(self.build_message(type=MessageCodes.LOGGED_IN.value))
-                                self.login = user.login
-                                Socket().add_user(user=user, leaf=self)
-                                break
-                    elif data['type'] == MessageTypes.REGISTER.value:
-                        if self._no_login_or_password(message=data, conn=conn):
-                            user = dao.UserDAO.register(login=data['login'], password=data['password'])
-                            if user is None:
-                                conn.send(self.build_message(type=MessageCodes.LOGIN_TAKEN.value))
-                            else:
-                                conn.send(self.build_message(type=MessageCodes.USER_REGISTERED.value))
-                                Socket().add_user(user=user, leaf=self)
-                                break
-            while True:
-                data = self.conn.recv(SOCKET_BUFF).decode("utf-8")
-                with self.mutex:
-                    if not data:
-                        break
-                    try:
-                        data = MessageParser.parse(message=data)
-                    except InvalidMessage:
-                        self.conn.send(MessageParser.unrecognized_message())
-                    else:
-                        if data['type'] == MessageTypes.INCOMING_MESSAGE.value:
-                            bla = True
-                            Socket().send_message(message=self.build_message(type=MessageTypes.INCOMING_MESSAGE.value), conn=self.conn)
-            Socket().remove_user(user=self, login=self.login)
+                    if message['type'] == MessageTypes.INCOMING_MESSAGE.value:
+                        from datetime import datetime
+                        from DBList import DBObject
+                        message = Message(content=message['message']['content'], creation_date=datetime.now().timestamp(), user=DBObject(func=dao.UserDAO.get_user, login=self.login))
+                        message = dao.MessageDAO.add_message(message=message)
+                        Socket().send_message(message=json.dumps(obj={
+                            "type": MessageTypes.INCOMING_MESSAGE.value,
+                            "message": {
+                                "user": message.user.login,
+                                "creation_date": message.creation_date.timestamp(),
+                                "content": message.content,
+                                "id_message": message.id_message
+                            }
+                        }), sender=self)
+
+    def close(self, code=None, reason=None):
+        Socket().remove_user(user=self, login=self.login)
 
 
 class UserComposite(User):
@@ -154,8 +154,8 @@ class UserComposite(User):
     def register_observer(self, observer):
         self._iterate(func=lambda user: user.register_observer(observer=observer))
 
-    def send_message(self, message, conn):
-        self._iterate(func=lambda user: user.send_message(message=message, conn=conn))
+    def send_message(self, message, sender):
+        self._iterate(func=lambda user: user.send_message(message=message, sender=sender))
 
     def unregister_observer(self, observer):
         self._iterate(func=lambda user: user.unregister_observer(observer=observer))
@@ -229,10 +229,10 @@ class Socket(object):
             elif isinstance(item, UserComposite):
                 self._users[login] = item.remove_user(user=user)
 
-    def send_message(self, message, conn):
+    def send_message(self, message, sender):
         with self.mutex:
             for login, user in self._users.items():
-                user.send_message(message=message, conn=conn)
+                user.send_message(message=message, sender=sender)
 
     def handle(self):
         s = socket.socket()
@@ -247,7 +247,21 @@ class Socket(object):
                 leaf.start()
 
 
+from tornado import web, ioloop
+
+
+class IndexHandler(web.RequestHandler):
+    @web.asynchronous
+    def get(self):
+        self.render("/home/mat-bi/i.html")
+
+
 if __name__ == "__main__":
+    app = web.Application([
+        (r'/', IndexHandler),
+        (r'/websocket', UserLeaf),
+    ])
+    app.listen(port=3000)
     dao.UserDAO.create_table()
     dao.MessageDAO.create_table()
-    Socket().handle()
+    ioloop.IOLoop.instance().start()

@@ -4,6 +4,9 @@ from abc import ABC, abstractproperty
 class NoFieldsField(Exception):
     pass
 
+class InvalidObject(Exception):
+    pass
+
 
 class DTO(ABC):
 
@@ -26,8 +29,15 @@ class DTO(ABC):
 
 class Message(DTO):
     fields = [
-        'id_message', 'content', 'creation_date'
+        'id_message', 'content', 'creation_date', 'user'
     ]
+
+    @staticmethod
+    def from_json(json):
+        if Message.fields not in json:
+            raise InvalidObject()
+
+        return Message(id_message=json['id_message'], content=json['content'], creation_date=json['creation_date'])
 
 
 class User(DTO):
