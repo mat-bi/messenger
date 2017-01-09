@@ -1,3 +1,4 @@
+import os
 import threading, json, dao
 import socket
 import enum
@@ -24,7 +25,7 @@ class MessageParser:
 
     @staticmethod
     def unrecognized_message():
-        return "\x00{}\xFF".format(json.dumps({"type": MessageTypes.UNRECOGNIZED_MESSAGE.value})).encode("utf-8")
+        return json.dumps({"type": MessageTypes.UNRECOGNIZED_MESSAGE.value})
 
 
 class User(ABC):
@@ -49,9 +50,6 @@ from tornado import websocket
 
 
 class UserLeaf(User, websocket.WebSocketHandler):
-    def _iterate(self, func):
-        for observer in self.observers:
-            func(observer=observer)
 
     def send_message(self, message, sender):
         if sender is not self:
@@ -59,22 +57,26 @@ class UserLeaf(User, websocket.WebSocketHandler):
                 self.write_message(message=message)
 
     def send_notification(self, notification):
-        for observer in self.observers:
-            observer.notify(notification=notification)
+        with self.mutex_observer:
+            for observer in self.observers:
+                observer.notify(notification=notification)
 
     def notify(self, notification):
         pass
 
     def register_observer(self, observer):
-        self.observers.append(observer)
+        with self.mutex_observer:
+            self.observers.append(observer)
 
     def unregister_observer(self, observer):
-        self.observers.remove(observer)
+        with self.mutex_observer:
+            self.observers.remove(observer)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.observers = []
         self.mutex = threading.RLock()
+        self.mutex_observer = threading.RLock()
         self.authenticated = False
 
     def build_message(self, **kwargs):
@@ -86,8 +88,9 @@ class UserLeaf(User, websocket.WebSocketHandler):
 
     def _no_login_or_password(self, message):
         if 'login' not in message or 'password' not in message:
-            self.write_message(self._unrecognized_message())
-            return False
+            with self.mutex:
+                self.write_message(self._unrecognized_message())
+                return False
         return True
 
     def on_message(self, message):
@@ -134,19 +137,27 @@ class UserLeaf(User, websocket.WebSocketHandler):
                         }), sender=self)
 
     def close(self, code=None, reason=None):
-        Socket().remove_user(user=self, login=self.login)
+        with self.mutex:
+            Socket().remove_user(user=self, login=self.login)
 
 
 class UserComposite(User):
     def __init__(self):
         self._users = []
+        self.mutex = threading.RLock()
 
     def add_user(self, user):
-        self._users.append(user)
+        with self.mutex:
+            self._users.append(user)
 
     def _iterate(self, func):
-        for user in self._users:
-            func(user=user)
+        with self.mutex:
+            for user in self._users:
+                func(user=user)
+
+    def remove_user(self, user):
+        with self.mutex:
+            self._users.remove(user)
 
     def notify(self, notification):
         self._iterate(func=lambda user: user.notify())
@@ -181,6 +192,7 @@ class MessageCodes(enum.Enum):
     LOGGED_IN = 3
     LOGIN_TAKEN = 4
     USER_REGISTERED = 5
+
 
 
 def singleton(cls):
@@ -234,18 +246,6 @@ class Socket(object):
             for login, user in self._users.items():
                 user.send_message(message=message, sender=sender)
 
-    def handle(self):
-        s = socket.socket()
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(('', 3000))
-        s.listen(5)
-        while True:
-            conn, addr = s.accept()
-            with self.mutex:
-                leaf = UserLeaf(conn=conn, addr=addr)
-                self._dirty.append(leaf)
-                leaf.start()
-
 
 from tornado import web, ioloop
 
@@ -253,13 +253,14 @@ from tornado import web, ioloop
 class IndexHandler(web.RequestHandler):
     @web.asynchronous
     def get(self):
-        self.render("/home/mat-bi/i.html")
+        self.render("web/index.html")
 
 
 if __name__ == "__main__":
     app = web.Application([
         (r'/', IndexHandler),
         (r'/websocket', UserLeaf),
+        (r'/static/(.*)', web.StaticFileHandler, {'path': os.path.join(os.getcwd(), 'web/static')})
     ])
     app.listen(port=3000)
     dao.UserDAO.create_table()
