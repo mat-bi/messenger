@@ -35,7 +35,7 @@ class MessageDAO(DAO):
     def _create_message(message, conn):
         import datetime
         return Message(id_message=message[0], content=message[1], creation_date=datetime.datetime.fromtimestamp(message[2]),
-                       user=DBObject(func=UserDAO.get_user, login=message[3], conn=conn))
+                       user=DBObject(func=UserDAO.get_user, login=message[3]))
 
     @staticmethod
     @transaction
@@ -45,7 +45,7 @@ class MessageDAO(DAO):
                                              "(?,?,?)",
                                        params=(message.content, message.creation_date, message.user.login),
                                        opts=InsertOne)
-        message.user = DBObject(func=UserDAO.get_user, login =message.user.login, conn=conn)
+        message.user = DBObject(func=UserDAO.get_user, login =message.user.login)
         return message
 
     @staticmethod
