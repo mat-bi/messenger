@@ -194,7 +194,8 @@ class UserLeaf(User, websocket.WebSocketHandler):
                         "login": self.login
                     }))
                     observer.unregister_observer(observer=self)
-            Socket().remove_user(user=self, login=self.login)
+            if self.authenticated is True:
+                Socket().remove_user(user=self, login=self.login)
 
 
 
