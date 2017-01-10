@@ -192,6 +192,28 @@ class UserLeaf(User, websocket.WebSocketHandler):
                             return_message['type'] = MessageCodes.USERS_FOUND.value
                             return_message['users'] = users
                         self.write_message(json.dumps(return_message))
+                    elif message['type'] == MessageTypes.FETCH_FRIENDS.value:
+                        friends = [{"login": user.login, "status": user.status, "state": Socket().get_state(user.login).value} for user in dao.FriendDAO.get_friends(user=dto.User(login=self.login))]
+                        self.write_message(message=json.dumps({
+                            "type": MessageCodes.FRIENDS_FETCHED.value,
+                            "friends": friends
+                        }))
+                    elif message['type'] == MessageTypes.LOGGED_USER.value:
+                        user = dao.UserDAO.get_user(login=self.login)
+                        self.write_message(message=json.dumps({
+                            "type": MessageCodes.LOGGED_USER.value,
+                            "user": {
+                                "login": user.login,
+                                "status": user.status
+                            }
+                        }))
+                    elif message['type'] == MessageTypes.LOGOUT.value:
+                        del self.login
+                        self.authenticated = False
+                        self.write_message(message=json.dumps({
+                            "type": MessageCodes.LOGGED_OUT.value
+                        }))
+
 
     def on_close(self, code=None, reason=None):
         with self.mutex:
@@ -253,6 +275,9 @@ class MessageTypes(enum.Enum):
     ADD_FRIEND = 5
     REMOVE_FRIEND = 6
     FIND_USERS = 7
+    FETCH_FRIENDS = 8
+    LOGGED_USER = 9
+    LOGOUT = 100
 
 
 class MessageCodes(enum.Enum):
@@ -269,6 +294,9 @@ class MessageCodes(enum.Enum):
     USERS_NOT_FOUND = 10
     MESSAGE_RECEIVED = 11
     INCOMING_MESSAGE = 12
+    FRIENDS_FETCHED = 13
+    LOGGED_USER = 14
+    LOGGED_OUT = 100
 
 
 def singleton(cls):
