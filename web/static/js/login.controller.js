@@ -18,6 +18,7 @@ $(document).ready(function () {
         };
 
         socket.send(JSON.stringify(register));
+        socket.send(JSON.stringify({"type" : 9}));
     });
 
     $('#login_btn').click(function (e) {
@@ -33,8 +34,7 @@ $(document).ready(function () {
         };
 
         socket.send(JSON.stringify(log));
-        localStorage.setItem("currentUser", login);
-        $(".name").text(login);
+        socket.send(JSON.stringify({"type" : 9}));
     });
 
     $('#send').click(function (e) {
@@ -91,7 +91,6 @@ $(document).ready(function () {
                 break;
             case 3:
                 toastr.success("Logged in successfully!");
-                localStorage.setItem("currentUser", login);
                 $(".name").text(login);
                 $(".wrapper").show();
                 $(".module").hide();
@@ -103,7 +102,6 @@ $(document).ready(function () {
                 break;
             case 5:
                 toastr.success('Registration successful!');
-                localStorage.setItem("currentUser", login);
                 $(".name").text(login);
                 $(".wrapper").show();
                 $(".module").hide();
@@ -114,6 +112,10 @@ $(document).ready(function () {
                 break;
             case 12:
                 $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "</div>");
+                break;
+            case 14:
+                localStorage.setItem("currentUser", JSON.parse(message.data).user.login);
+                $('.name').text(localStorage.getItem("currentUser"));
                 break;
             default:
                 console.log(responseCode + '- kod do obsluzenia');
