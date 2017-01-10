@@ -17,6 +17,8 @@ $(document).ready(function () {
         };
 
         socket.send(JSON.stringify(register));
+        localStorage.setItem("currentUser", login);
+        $(".name").text(login);
     });
 
     $('#login_btn').click(function (e) {
@@ -32,6 +34,8 @@ $(document).ready(function () {
         };
 
         socket.send(JSON.stringify(log));
+        localStorage.setItem("currentUser", login);
+        $(".name").text(login);
     });
 
     $('#send').click(function () {
@@ -83,12 +87,14 @@ $(document).ready(function () {
         switch (responseCode) {
             case 2:
                 toastr.error('Wrong login and/or password!');
+                localStorage.removeItem("currentUser");
                 break;
             case 3:
                 toastr.success("Logged in successfully!");
                 break;
             case 4:
                 toastr.error('Login is already taken!');
+                localStorage.removeItem("currentUser");
                 break;
             case 5:
                 toastr.success('Registration successful!');
@@ -104,4 +110,8 @@ $(document).ready(function () {
                 break;
         }
     };
+
+    socket.onclose = function (message) {
+        localStorage.removeItem("currentUser");
+    }
 });
