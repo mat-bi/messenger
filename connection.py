@@ -159,6 +159,9 @@ class DBConnection(Connection):
         super(DBConnection, self).__init__()
         self._db = apsw.Connection(db)
         self._cursor = None
+        self.begin_transaction()
+        self.exec(query="PRAGMA foreign_keys = ON;")
+        self.commit()
 
     def exec(self, query, params=None, *args, **kwargs):
         if kwargs.get("opts") is None:  # if no option provided
