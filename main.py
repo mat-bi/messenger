@@ -102,24 +102,27 @@ class UserLeaf(User, websocket.WebSocketHandler):
             else:
                 if self.authenticated is False:
                     if message['type'] == MessageTypes.LOGIN.value:
-                        if message['type'] == MessageTypes.LOGIN.value:
-                            if self._no_login_or_password(message=message):
-                                user = dao.UserDAO.login(login=message['login'], password=message['password'])
-                                if user is None:
-                                    self.write_message(self.build_message(type=MessageCodes.WRONG_CREDENTIALS.value))
-                                else:
-                                    self.write_message(self.build_message(type=MessageCodes.LOGGED_IN.value))
-                                    self.login = user.login
-                                    self.authenticated = True
-                                    Socket().add_user(user=user, leaf=self)
-                        elif message['type'] == MessageTypes.REGISTER.value:
-                            if self._no_login_or_password(message=message):
-                                user = dao.UserDAO.register(login=message['login'], password=message['password'])
-                                if user is None:
-                                    self.write_message(self.build_message(type=MessageCodes.LOGIN_TAKEN.value))
-                                else:
-                                    self.write_message(self.build_message(type=MessageCodes.USER_REGISTERED.value))
-                                    Socket().add_user(user=user, leaf=self)
+                        if self._no_login_or_password(message=message):
+                            user = dao.UserDAO.login(login=message['login'], password=message['password'])
+                            if user is None:
+                                self.write_message(self.build_message(type=MessageCodes.WRONG_CREDENTIALS.value))
+                            else:
+                                self.write_message(self.build_message(type=MessageCodes.LOGGED_IN.value))
+                                self.login = user.login
+                                self.authenticated = True
+                                Socket().add_user(user=user, leaf=self)
+                    elif message['type'] == MessageTypes.REGISTER.value:
+                        if self._no_login_or_password(message=message):
+                            import connection
+                            conn = connection.ConnectionPool.get_connection()
+                            user = dao.UserDAO.register(login=message['login'], password=message['password'], conn=conn)
+                            connection.ConnectionPool.release_connection(conn)
+
+                            if user is None:
+                                self.write_message(self.build_message(type=MessageCodes.LOGIN_TAKEN.value))
+                            else:
+                                self.write_message(self.build_message(type=MessageCodes.USER_REGISTERED.value))
+                                Socket().add_user(user=user, leaf=self)
                 else:
                     if message['type'] == MessageTypes.INCOMING_MESSAGE.value:
                         from datetime import datetime
