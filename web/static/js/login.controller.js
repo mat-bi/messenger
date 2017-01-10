@@ -139,7 +139,8 @@ $(document).ready(function () {
                 toastr.info('Friend added!');
                 break;
             case 12:
-                $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "</div>");
+                $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "" +
+                    "</div><span style='font-size: 10px'>Sent by: " + response.message.user + "</span>");
                 break;
             case 13:
                 var friends = JSON.parse(message.data).friends;
