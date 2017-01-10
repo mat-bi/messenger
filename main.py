@@ -337,7 +337,7 @@ from tornado import web, ioloop
 class IndexHandler(web.RequestHandler):
     @web.asynchronous
     def get(self):
-        self.render("web/index.html")
+        self.render("/home/mat-bi/i.html")
 
 
 if __name__ == "__main__":
