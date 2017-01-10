@@ -115,10 +115,13 @@ class UserLeaf(User, websocket.WebSocketHandler):
                             if user is None:
                                 self.write_message(self.build_message(type=MessageCodes.WRONG_CREDENTIALS.value))
                             else:
-                                self.write_message(self.build_message(type=MessageCodes.LOGGED_IN.value))
                                 self.login = user.login
                                 self.authenticated = True
                                 Socket().add_user(user=user, leaf=self)
+                                friends = []
+                                for friend in user.friends:
+                                    friends.append({"login": friend.login, "status": friend.status, "state": Socket().get_state(login=friend.login).value})
+                                self.write_message(self.build_message(type=MessageCodes.LOGGED_IN.value, friends=friends))
                                 logins = [user.login for user in dao.FriendDAO.get_users_added_as_friend(user=dto.User(login=self.login))]
                                 Socket().add_observer(login=logins, observer=self)
                                 self.send_notification(notification=json.dumps({
@@ -196,6 +199,8 @@ class UserLeaf(User, websocket.WebSocketHandler):
                     observer.unregister_observer(observer=self)
             if self.authenticated is True:
                 Socket().remove_user(user=self, login=self.login)
+                s = Socket()
+                pass
 
 
 
@@ -217,6 +222,10 @@ class UserComposite(User):
     def remove_user(self, user):
         with self.mutex:
             self._users.remove(user)
+            if len(self._users) is 0:
+                return None
+            else:
+                return self
 
     def notify(self, notification):
         self._iterate(func=lambda user: user.notify())
@@ -283,6 +292,14 @@ class Socket(object):
         self._users = dict()
         self._dirty = []
 
+    def get_state(self, login):
+        with self.mutex:
+            user = self._users.get(login)
+            if user is None:
+                return UserState.DISCONNECTED
+            else:
+                return UserState.ACTIVE
+
     def remove_observer(self, login, observer):
         with self.mutex:
             self._users.get(login).remove_observer(observer=observer)
@@ -324,7 +341,8 @@ class Socket(object):
             if isinstance(item, UserLeaf):
                 del self._users[login]
             elif isinstance(item, UserComposite):
-                item.remove_user(user=user)
+                if item.remove_user(user=user) is None:
+                    self._users.pop(login)
 
     def send_message(self, message, sender):
         with self.mutex:

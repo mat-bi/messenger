@@ -105,8 +105,8 @@ class FriendDAO(DAO):
     @transaction
     def get_friends(user, conn=None):
         return conn.exec(
-            query="SELECT U.login, U.password, U.status FROM FRIEND F JOIN User U ON U.login=F.friend1 WHERE F.friend2=? ",
-            params=(user.login, user.login), opts=FetchAll)
+            query="SELECT U.login, U.password, U.status FROM FRIEND F JOIN User U ON U.login=F.friend2 WHERE F.friend1=? ",
+            params=(user.login,), opts=FetchAll)
 
 
     @staticmethod
