@@ -77,6 +77,20 @@ $(document).ready(function () {
         $("#add_friend_text").val('');
     });
 
+    var addToFriendList = function (login, state) {
+        var active = "Active",
+            disconnected = "Disconnected";
+
+        $(".li-placeholder").before(
+            "<li class=\"person\" data-chat=\"person2\">" +
+                "<img src=\"http://s3.postimg.org/yf86x7z1r/img2.jpg\" alt=\"\"/>" +
+                "<span class=\"name\">" + login + "<br></span>" +
+                "<span class=\"time\">1:44 PM</span>" +
+                "<span class=\"preview\">" + (state == 0 ? active : disconnected) + "</span>" +
+            "</li>"
+        );
+    };
+
     socket.onopen = function (message) {
         console.log('open');
     };
@@ -113,9 +127,17 @@ $(document).ready(function () {
             case 12:
                 $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "</div>");
                 break;
+            case 13:
+                var friends = JSON.parse(message.data).friends;
+                for(var i = 0; i < friends.length; i++) {
+                    addToFriendList(friends[i].login, friends[i].state);
+                }
+                break;
             case 14:
                 localStorage.setItem("currentUser", JSON.parse(message.data).user.login);
                 $('.name').text(localStorage.getItem("currentUser"));
+                var msg = {"type" : 8, "login" : localStorage.getItem("currentUser")};
+                socket.send(JSON.stringify(msg));
                 break;
             default:
                 console.log(responseCode + '- kod do obsluzenia');
