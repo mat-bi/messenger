@@ -56,15 +56,27 @@ $(document).ready(function () {
     };
 
     socket.onmessage = function (message) {
+        var response = JSON.parse(message.data);
         var responseCode = JSON.parse(message.data).type;
-        if (responseCode == 2) {
-            toastr.error('Wrong login and/or password!');
-        } else if (responseCode == 3) {
-            toastr.success("Logged in successfully!");
-        } else if (responseCode == 4) {
-            toastr.error('Login is already taken!');
-        } else if (responseCode == 5) {
-            toastr.success('Registration successful!');
+        switch (responseCode) {
+            case 2:
+                toastr.error('Wrong login and/or password!');
+                break;
+            case 3:
+                toastr.success("Logged in successfully!");
+                break;
+            case 4:
+                toastr.error('Login is already taken!');
+                break;
+            case 5:
+                toastr.success('Registration successful!');
+                break;
+            case 12:
+                $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "</div>");
+                break;
+            default:
+                console.log('do obsluzenia');
+                break;
         }
     };
 });
