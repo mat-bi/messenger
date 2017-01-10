@@ -32,7 +32,7 @@ class MessageParser:
 
     @staticmethod
     def unrecognized_message():
-        return json.dumps({"type": MessageTypes.UNRECOGNIZED_MESSAGE.value})
+        return json.dumps({"type": MessageCodes.UNRECOGNIZED_MESSAGE.value})
 
 
 class User(ABC):
@@ -152,7 +152,7 @@ class UserLeaf(User, websocket.WebSocketHandler):
                             "id_message": message.id_message
                         })
                         Socket().send_message(message=json.dumps(obj={
-                            "type": MessageTypes.INCOMING_MESSAGE.value,
+                            "type": MessageCodes.INCOMING_MESSAGE.value,
                             "message": {
                                 "user": message.user.login,
                                 "creation_date": message.creation_date.timestamp(),
@@ -256,6 +256,7 @@ class MessageTypes(enum.Enum):
 
 
 class MessageCodes(enum.Enum):
+    UNRECOGNIZED_MESSAGE = 0
     SEND_CREDENTIALS = 1
     WRONG_CREDENTIALS = 2
     LOGGED_IN = 3
@@ -267,6 +268,7 @@ class MessageCodes(enum.Enum):
     USERS_FOUND = 9
     USERS_NOT_FOUND = 10
     MESSAGE_RECEIVED = 11
+    INCOMING_MESSAGE = 12
 
 
 def singleton(cls):
