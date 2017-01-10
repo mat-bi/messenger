@@ -67,10 +67,10 @@ $(document).ready(function () {
         socket.send(JSON.stringify(message));
         $(".li-placeholder").before(
             "<li class=\"person\" data-chat=\"person2\">" +
-                "<img src=\"http://s3.postimg.org/yf86x7z1r/img2.jpg\" alt=\"\"/>" +
+                "<img src='" + getRandomImage() + "' alt=\"\"/>" +
                 "<span class=\"name\">" + friendLogin + "</span>" +
                 "<span class=\"time\">1:44 PM</span>" +
-                "<span class=\"preview\">I've forgotten how it felt before</span>" +
+                "<span class=\"preview\">&nbsp;</span>" +
             "</li>"
         );
 
@@ -83,12 +83,26 @@ $(document).ready(function () {
 
         $(".li-placeholder").before(
             "<li class=\"person\" data-chat=\"person2\">" +
-                "<img src=\"http://s3.postimg.org/yf86x7z1r/img2.jpg\" alt=\"\"/>" +
+                "<img src='" + getRandomImage() + "' alt=\"\"/>" +
                 "<span class=\"name\">" + login + "<br></span>" +
                 "<span class=\"time\">1:44 PM</span>" +
                 "<span class=\"preview\">" + (state == 0 ? active : disconnected) + "</span>" +
             "</li>"
         );
+    };
+
+    var getRandomImage = function () {
+        var images = [
+            "../static/img/bob.jpg",
+            "../static/img/car.jpg",
+            "../static/img/cat.jpg",
+            "../static/img/chess.png",
+            "../static/img/doge.jpg"
+        ];
+
+        var randomNumber = Math.floor(Math.random() * 5) + 1;
+        console.log(randomNumber);
+        return images[randomNumber - 1];
     };
 
     socket.onopen = function (message) {
