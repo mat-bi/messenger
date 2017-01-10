@@ -2,6 +2,7 @@
  * Created by micha on 10.01.2017.
  */
 $(document).ready(function () {
+    $(".wrapper").hide();
     var socket = new WebSocket("ws://127.0.0.1:3000/websocket");
 
     $('#register_btn').click(function (e) {
@@ -17,8 +18,6 @@ $(document).ready(function () {
         };
 
         socket.send(JSON.stringify(register));
-        localStorage.setItem("currentUser", login);
-        $(".name").text(login);
     });
 
     $('#login_btn').click(function (e) {
@@ -38,7 +37,8 @@ $(document).ready(function () {
         $(".name").text(login);
     });
 
-    $('#send').click(function () {
+    $('#send').click(function (e) {
+        e.preventDefault();
         var text = $("#text").val();
         if (text.replace(/\s/g, "") == "") return;
 
@@ -91,6 +91,11 @@ $(document).ready(function () {
                 break;
             case 3:
                 toastr.success("Logged in successfully!");
+                localStorage.setItem("currentUser", login);
+                $(".name").text(login);
+                $(".wrapper").show();
+                $(".module").hide();
+                $(".pen-title").hide();
                 break;
             case 4:
                 toastr.error('Login is already taken!');
@@ -98,6 +103,11 @@ $(document).ready(function () {
                 break;
             case 5:
                 toastr.success('Registration successful!');
+                localStorage.setItem("currentUser", login);
+                $(".name").text(login);
+                $(".wrapper").show();
+                $(".module").hide();
+                $(".pen-title").hide();
                 break;
             case 7:
                 toastr.info('Friend added!');
