@@ -139,6 +139,8 @@ class UserLeaf(User, websocket.WebSocketHandler):
                             else:
                                 self.write_message(self.build_message(type=MessageCodes.USER_REGISTERED.value))
                                 Socket().add_user(user=user, leaf=self)
+                                self.login = user.login
+                                self.authenticated = True
                 else:
                     if message['type'] == MessageTypes.INCOMING_MESSAGE.value:
                         from datetime import datetime
