@@ -2,6 +2,8 @@ import os
 import threading, json, dao
 import socket
 import enum
+
+import dto
 from dto import Message
 import threading
 from abc import ABC, abstractmethod
@@ -9,6 +11,10 @@ from abc import ABC, abstractmethod
 
 class InvalidMessage(Exception):
     pass
+
+class UserState(enum.Enum):
+    ACTIVE = 0
+    DISCONNECTED = 1
 
 
 class MessageParser:
@@ -62,7 +68,9 @@ class UserLeaf(User, websocket.WebSocketHandler):
                 observer.notify(notification=notification)
 
     def notify(self, notification):
-        pass
+        with self.mutex:
+            self.write_message(notification)
+
 
     def register_observer(self, observer):
         with self.mutex_observer:
@@ -111,6 +119,13 @@ class UserLeaf(User, websocket.WebSocketHandler):
                                 self.login = user.login
                                 self.authenticated = True
                                 Socket().add_user(user=user, leaf=self)
+                                logins = [user.login for user in dao.FriendDAO.get_users_added_as_friend(user=dto.User(login=self.login))]
+                                Socket().add_observer(login=logins, observer=self)
+                                self.send_notification(notification=json.dumps({
+                                    "type": MessageCodes.STATE_CHANGED.value,
+                                    "state": UserState.ACTIVE.value,
+                                    "login": self.login
+                                }))
                     elif message['type'] == MessageTypes.REGISTER.value:
                         if self._no_login_or_password(message=message):
                             import connection
@@ -138,10 +153,50 @@ class UserLeaf(User, websocket.WebSocketHandler):
                                 "id_message": message.id_message
                             }
                         }), sender=self)
+                    elif message['type'] == MessageTypes.CHANGE_STATUS.value:
+                        user = dto.User(status=message['status'], login=self.login)
+                        dao.UserDAO.change_status(user=user)
+                        self.send_notification(notification=json.dumps({"type": MessageCodes.STATUS_CHANGED.value, "user": {
+                            "login": self.login,
+                            "status": message['status']
+                        }}))
 
-    def close(self, code=None, reason=None):
+                    elif message['type'] == MessageTypes.ADD_FRIEND.value:
+                        import connection
+                        conn = connection.ConnectionPool.get_connection()
+                        if dao.FriendDAO.add_friend(user=dto.User(login=self.login), friend=dto.User(login=message['login']), conn=conn):
+                            self.write_message(message=json.dumps({
+                                "type": MessageCodes.FRIEND_ADDED.value
+                            }))
+                            Socket().add_observer(login=message['login'], observer=self)
+                    elif message['type'] == MessageTypes.REMOVE_FRIEND.value:
+                        dao.FriendDAO.remove_friends(user=dto.User(login=self.login), friend=dto.User(login=message['login']))
+                        Socket().remove_observer(login=message['login'], observer=self)
+                    elif message['type'] == MessageTypes.FIND_USERS.value:
+                        users = [user.login for user in dao.UserDAO.find_users(login=message['login'], excluded_login=self.login)]
+                        return_message = {}
+                        if len(users) is 0:
+                            return_message['type'] = MessageCodes.USERS_NOT_FOUND.value
+                        else:
+                            return_message['type'] = MessageCodes.USERS_FOUND.value
+                            return_message['users'] = users
+                        self.write_message(json.dumps(return_message))
+
+
+
+    def on_close(self, code=None, reason=None):
         with self.mutex:
+            with self.mutex_observer:
+                for observer in self.observers:
+                    observer.notify(notification=json.dumps({
+                        "type": MessageCodes.STATE_CHANGED.value,
+                        "state": UserState.DISCONNECTED.value,
+                        "login": self.login
+                    }))
+                    observer.unregister_observer(observer=self)
             Socket().remove_user(user=self, login=self.login)
+
+
 
 
 class UserComposite(User):
@@ -187,6 +242,10 @@ class MessageTypes(enum.Enum):
     REGISTER = 1
     INCOMING_MESSAGE = 2
     UNRECOGNIZED_MESSAGE = 3
+    CHANGE_STATUS = 4
+    ADD_FRIEND = 5
+    REMOVE_FRIEND = 6
+    FIND_USERS = 7
 
 
 class MessageCodes(enum.Enum):
@@ -195,6 +254,11 @@ class MessageCodes(enum.Enum):
     LOGGED_IN = 3
     LOGIN_TAKEN = 4
     USER_REGISTERED = 5
+    STATUS_CHANGED = 6
+    FRIEND_ADDED = 7
+    STATE_CHANGED = 8
+    USERS_FOUND = 9
+    USERS_NOT_FOUND = 10
 
 
 
@@ -217,6 +281,23 @@ class Socket(object):
     def __init__(self):
         self._users = dict()
         self._dirty = []
+
+    def remove_observer(self, login, observer):
+        with self.mutex:
+            self._users.get(login).remove_observer(observer=observer)
+
+    def _add_observer(self,login, observer):
+        user = self._users.get(login)
+        if user is not None:
+            observer.register_observer(observer=user)
+
+    def add_observer(self, login, observer):
+        with self.mutex:
+            if isinstance(login, list) or isinstance(login, tuple):
+                for item in login:
+                    self._add_observer(login=item, observer=observer)
+            else:
+                self._add_observer(login=login, observer=observer)
 
     def add_user(self, user, leaf):
         with self.mutex:
@@ -242,7 +323,7 @@ class Socket(object):
             if isinstance(item, UserLeaf):
                 del self._users[login]
             elif isinstance(item, UserComposite):
-                self._users[login] = item.remove_user(user=user)
+                item.remove_user(user=user)
 
     def send_message(self, message, sender):
         with self.mutex:
@@ -256,7 +337,7 @@ from tornado import web, ioloop
 class IndexHandler(web.RequestHandler):
     @web.asynchronous
     def get(self):
-        self.render("web/index.html")
+        self.render("/home/mat-bi/i.html")
 
 
 if __name__ == "__main__":
@@ -268,4 +349,5 @@ if __name__ == "__main__":
     app.listen(port=3000)
     dao.UserDAO.create_table()
     dao.MessageDAO.create_table()
+    dao.FriendDAO.create_table()
     ioloop.IOLoop.instance().start()
