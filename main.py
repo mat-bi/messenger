@@ -337,14 +337,14 @@ from tornado import web, ioloop
 class IndexHandler(web.RequestHandler):
     @web.asynchronous
     def get(self):
-        self.render("/home/mat-bi/i.html")
+        self.render("web/index.html")
 
 
 if __name__ == "__main__":
     app = web.Application([
         (r'/', IndexHandler),
         (r'/websocket', UserLeaf),
-        (r'/static/(.*)', web.StaticFileHandler, {'path': os.path.join(os.getcwd(), 'web/static')})
+        (r'/(.*)', web.StaticFileHandler, {'path': os.path.join(os.getcwd(), 'web')})
     ])
     app.listen(port=3000)
     dao.UserDAO.create_table()

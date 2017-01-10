@@ -147,7 +147,6 @@ def no_transaction(func):
 
 import apsw
 class DBConnection(Connection):
-
     def rollback(self, name=None):
         super(DBConnection, self).rollback(name)
         query = "ROLLBACK"

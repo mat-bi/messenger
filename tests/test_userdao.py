@@ -16,7 +16,9 @@ class TestUserDAO(TestCase):
     def test_get_user(self):
         self.assertEqual(UserDAO.register(login='test',password='1234',conn=self.conn).login, 'test')
         self.conn.begin_transaction()
-        self.assertEqual(UserDAO.get_user(login='test', conn=self.conn), User(login='test', password='1234'))
+        user = UserDAO.get_user(login='test', conn=self.conn)
+        self.assertEqual(user.login, 'test')
+        self.assertEqual(user.password, '1234')
         self.conn.commit()
 
     def tearDown(self):

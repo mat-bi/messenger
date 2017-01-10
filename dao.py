@@ -45,6 +45,7 @@ class MessageDAO(DAO):
                                              "(?,?,?)",
                                        params=(message.content, message.creation_date, message.user.login),
                                        opts=InsertOne)
+        message.user = DBObject(func=UserDAO.get_user, login =message.user.login, conn=conn)
         return message
 
     @staticmethod
@@ -150,7 +151,7 @@ class UserDAO(DAO):
         conn.begin_transaction(exclusive=True)
         user = conn.exec(query="SELECT login,password, status FROM User WHERE login=?;", params=(login,), opts=FetchOne)
         if user is None:
-            user = UserDAO._create_user(user=(login,password))
+            user = UserDAO._create_user(user=(login,password,''))
             conn.exec("INSERT INTO User(login, password) VALUES (?,?);", params=(login, password), opts=InsertOne)
             conn.commit()
             return user

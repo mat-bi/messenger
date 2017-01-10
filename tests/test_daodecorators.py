@@ -20,5 +20,5 @@ class TestDAODecorators(TestCase):
         connections[0].begin_transaction()
         user = UserDAO.get_user(login='test', conn=connections[0])
         connections[0].commit()
-        self.assertEqual(UserDAO.get_user(login=user.login, conn=connections[1]), User(login=user.login, password='1234'))
-        self.assertEqual(UserDAO.get_user(login=user.login, conn=connections[2]), User(login=user.login, password='1234'))
+        self.assertEqual(UserDAO.get_user(login=user.login, conn=connections[1]).login, user.login)
+        self.assertEqual(UserDAO.get_user(login=user.login, conn=connections[2]).password, user.password)
