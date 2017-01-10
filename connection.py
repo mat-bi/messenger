@@ -147,7 +147,6 @@ def no_transaction(func):
 
 import apsw
 class DBConnection(Connection):
-    @no_transaction
     def rollback(self, name=None):
         super(DBConnection, self).rollback(name)
         query = "ROLLBACK"
@@ -161,7 +160,6 @@ class DBConnection(Connection):
         self._db = apsw.Connection(db)
         self._cursor = None
 
-    @no_transaction
     def exec(self, query, params=None, *args, **kwargs):
         if kwargs.get("opts") is None:  # if no option provided
             opts = FetchNone()  # choose to return nothing
@@ -183,13 +181,11 @@ class DBConnection(Connection):
             opts = opts()  # creates an instance
         return opts.exec(cursor=self._cursor,conn=self._db)  # returns the selected option
 
-    @no_transaction
     def commit(self):
         super().commit()
         self._cursor.execute("COMMIT")
         self._cursor = None
 
-    @no_transaction
     def savepoint(self, name):
         super().savepoint(name)
         self._savepoints.append(name)

@@ -40,11 +40,16 @@ class DBObject(object):
         self._obj = None
 
     @fetch
+    def _fetch(self):
+        pass
+
+    @fetch
     def __getattr__(self, item):
         return getattr(self._obj, item)
 
     @fetch
     def __eq__(self, other):
         if isinstance(other, self.__class__):
+            other._fetch()
             return self._obj == other._obj
         return self._obj == other

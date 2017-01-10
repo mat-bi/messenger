@@ -29,16 +29,6 @@ class TestDbConnection(TestCase):
         with self.assertRaises(InvalidSavepointName):
             conn.savepoint(name='123')
 
-    def test_rollback_without_transaction(self):
-        conn = DBConnection(db=':memory:')
-        with self.assertRaises(NoTransaction):
-            conn.rollback()
-
-    def test_exec_without_transaction(self):
-        conn = DBConnection(db=':memory:')
-        with self.assertRaises(NoTransaction):
-            conn.exec("SELECT sqlite_version()")
-
     def test_exec_opts_is_not_a_subclass_of_execcommand(self):
         with DBConnection(db=':memory:') as conn:
             with self.assertRaises(NoExecObject):

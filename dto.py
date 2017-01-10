@@ -42,5 +42,5 @@ class Message(DTO):
 
 class User(DTO):
     fields = [
-        'login', 'password'
+        'login', 'password', 'status'
     ]
