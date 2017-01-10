@@ -36,7 +36,7 @@ $(document).ready(function () {
 
     $('#send').click(function () {
         var text = $("#text").val();
-        if(text.replace(/\s/g,"") == "") return;
+        if (text.replace(/\s/g, "") == "") return;
 
         var message = {
             "type": 2,
@@ -49,6 +49,28 @@ $(document).ready(function () {
 
         $(".placeholder").before("<div class=\"bubble me\">" + text + "</div>");
         $("#text").val('');
+    });
+
+    $('#add_friend').click(function () {
+        var friendLogin = $("#add_friend_text").val();
+        if (friendLogin.replace(/\s/g, "") == "") return;
+
+        var message = {
+            "type": 5,
+            "login": friendLogin
+        };
+
+        socket.send(JSON.stringify(message));
+        $(".li-placeholder").before(
+            "<li class=\"person\" data-chat=\"person2\">" +
+                "<img src=\"http://s3.postimg.org/yf86x7z1r/img2.jpg\" alt=\"\"/>" +
+                "<span class=\"name\">" + friendLogin + "</span>" +
+                "<span class=\"time\">1:44 PM</span>" +
+                "<span class=\"preview\">I've forgotten how it felt before</span>" +
+            "</li>"
+        );
+
+        $("#add_friend_text").val('');
     });
 
     socket.onopen = function (message) {
@@ -71,11 +93,14 @@ $(document).ready(function () {
             case 5:
                 toastr.success('Registration successful!');
                 break;
+            case 7:
+                toastr.info('Friend added!');
+                break;
             case 12:
                 $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "</div>");
                 break;
             default:
-                console.log('do obsluzenia');
+                console.log(responseCode + '- kod do obsluzenia');
                 break;
         }
     };
