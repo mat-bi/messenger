@@ -215,6 +215,9 @@ $(document).ready(function () {
             case 16:
                 toastr.error("Friendship exists!");
                 break;
+            case 17:
+                toastr.error("You cannot add yourself as a friend!");
+                break;
             default:
                 console.log(responseCode + '- kod do obsluzenia');
                 break;
