@@ -70,7 +70,7 @@ $(document).ready(function () {
 
         socket.send(JSON.stringify(message));
 
-        $(".placeholder").before("<div class=\"bubble me\">" + text + "</div>");
+        $(".placeholder").before("<div class=\"bubble me baby-dont-break-me\">" + text + "</div>");
         scrollToBottom();
         $("#text").val('');
     }
