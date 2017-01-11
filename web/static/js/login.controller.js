@@ -198,7 +198,7 @@ $(document).ready(function () {
                     var previousDiv = $(".placeholder").prev("div");
                     var span = $(previousDiv).find("span");
                     var text = $(span).prev().text();
-                    $(span).before(text + " " + response.message.content);
+                    $(span).before(text + "\n" + response.message.content);
                 } else {
                     $(".placeholder").before("<div class=\"bubble you\" >" + response.message.content + "" +
                     "<span style='font-size: 10px'><br>Sent by: " + response.message.user + "</span></div>");
