@@ -156,9 +156,8 @@ $(document).ready(function () {
                 console.log(user);
                 var state = (user.state == 0) ? "Active":"Disconnected";
                 $("#person_"+user.login).children(".preview").text(state);
-                var text = user.login
-                text += " became ";
-                text += state.toLowerCase();
+                var text = user.login;
+                text += state == "Active" ? " came online!" : " disconnected from chat";
                 toastr.info(text);
                 break;
             case 9:
