@@ -161,15 +161,15 @@ $(document).ready(function () {
                 toastr.info('Friend added!');
                 var user = JSON.parse(message.data).user;
                 $("#friends_list").empty();
-                var state = (user.state == 0) ? "Active":"Disconnected";
+                var state = (user.state == 0) ? "Active" : "Disconnected";
                 $(".li-placeholder").before(
-            "<li class=\"person\" id=\"person_"+user.login+"\" data-chat=\"person2\">" +
-                "<img src=\"" + getRandomImage() + "\"/>" +
-                "<span class=\"name\">" + user.login + "<br/></span>" +
-                "<span class=\"time\">1:44 PM</span>" +
-                "<span class=\"preview\">"+ state +"</span>" +
-            "</li>"
-        );
+                    "<li class=\"person\" id=\"person_" + user.login + "\" data-chat=\"person2\">" +
+                    "<img src=\"" + getRandomImage() + "\"/>" +
+                    "<span class=\"name\">" + user.login + "<br/></span>" +
+                    "<span class=\"time\">1:44 PM</span>" +
+                    "<span class=\"preview\">" + state + "</span>" +
+                    "</li>"
+                );
                 break;
             case 8:
                 var user = JSON.parse(message.data);
