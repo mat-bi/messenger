@@ -3,6 +3,8 @@ import threading, json, dao
 import socket
 import enum
 
+import sys
+
 import dto
 from dto import Message
 import threading
@@ -77,7 +79,10 @@ class UserLeaf(User, websocket.WebSocketHandler):
 
     def unregister_observer(self, observer):
         with self.mutex_observer:
-            self.observers.remove(observer)
+            if self.observers.get(observer) is not None:
+                self.observers.remove(observer)
+                return True
+            return False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -174,12 +179,30 @@ class UserLeaf(User, websocket.WebSocketHandler):
                     elif message['type'] == MessageTypes.ADD_FRIEND.value:
                         import connection
                         conn = connection.ConnectionPool.get_connection()
-                        if dao.FriendDAO.add_friend(user=dto.User(login=self.login),
-                                                    friend=dto.User(login=message['login']), conn=conn):
-                            self.write_message(message=json.dumps({
-                                "type": MessageCodes.FRIEND_ADDED.value
-                            }))
-                            Socket().add_observer(login=message['login'], observer=self)
+                        try:
+                            added = dao.FriendDAO.add_friend(user=dto.User(login=self.login),
+                                                        friend=dto.User(login=message['login']), conn=conn)
+                        except dao.NotAUser as ex:
+                            if ex.login is self.login:
+                                self.close(code=1008)
+                            else:
+                                self.write_message(message=json.dumps({
+                                    "type": MessageCodes.FRIEND_DOESNT_EXIST.value
+                                }))
+                        else:
+                            if added is True:
+                                self.write_message(message=json.dumps({
+                                    "type": MessageCodes.FRIEND_ADDED.value,
+                                    "user": {
+                                        "login": message['login'],
+                                        "state": Socket().get_state(login=message['login']).value
+                                    }
+                                }))
+                                Socket().add_observer(login=message['login'], observer=self)
+                            else:
+                                self.write_message(message=json.dumps({
+                                    "type": MessageCodes.FRIENDSHIP_EXISTS.value
+                                }))
                     elif message['type'] == MessageTypes.REMOVE_FRIEND.value:
                         dao.FriendDAO.remove_friends(user=dto.User(login=self.login),
                                                      friend=dto.User(login=message['login']))
@@ -219,14 +242,16 @@ class UserLeaf(User, websocket.WebSocketHandler):
 
     def on_close(self, code=None, reason=None):
         with self.mutex:
-            with self.mutex_observer:
-                for observer in self.observers:
-                    observer.unregister_observer(observer=self)
             if self.authenticated is True:
                 Socket().remove_user(user=self, login=self.login)
 
 
 class UserComposite(User):
+
+    def __len__(self):
+        with self.mutex:
+            return len(self._users)
+
     def __init__(self):
         self._users = []
         self.mutex = threading.RLock()
@@ -243,8 +268,8 @@ class UserComposite(User):
     def remove_user(self, user):
         with self.mutex:
             self._users.remove(user)
-            if len(self._users) is 0:
-                return None
+            if len(self._users) is 1:
+                return self._users[0]
             else:
                 return self
 
@@ -259,6 +284,9 @@ class UserComposite(User):
 
     def unregister_observer(self, observer):
         self._iterate(func=lambda user: user.unregister_observer(observer=observer))
+
+    def close(self):
+        self._iterate(func=lambda user: user.close())
 
 
 class NoUser(Exception):
@@ -298,6 +326,8 @@ class MessageCodes(enum.Enum):
     INCOMING_MESSAGE = 12
     FRIENDS_FETCHED = 13
     LOGGED_USER = 14
+    FRIEND_DOESNT_EXIST = 15
+    FRIENDSHIP_EXISTS = 16
     LOGGED_OUT = 100
 
 
@@ -319,7 +349,6 @@ class Socket(object):
 
     def __init__(self):
         self._users = dict()
-        self._dirty = []
 
     def get_state(self, login):
         with self.mutex:
@@ -364,8 +393,19 @@ class Socket(object):
             elif isinstance(item, UserComposite):
                 item.add_user(user=leaf)
             self._users[user.login] = item
-            if leaf in self._dirty:
-                self._dirty.remove(leaf)
+
+
+    def _send_disconnected(self, user):
+        user.send_notification(notification=json.dumps({
+            "type": MessageCodes.STATE_CHANGED.value,
+            "state": UserState.DISCONNECTED.value,
+            "login": user.login
+        }))
+
+    def unregister_observer(self, user):
+        with self.mutex:
+            for login, user in self._users.items():
+                user.unregister_observer(observer=user)
 
     def remove_user(self, user, login):
         with self.mutex:
@@ -373,16 +413,15 @@ class Socket(object):
                 raise NoUser()
             item = self._users[login]
             if isinstance(item, UserLeaf):
+                self._send_disconnected(user=user)
                 del self._users[login]
             elif isinstance(item, UserComposite):
-                user.send_notification(notification=json.dumps({
-                    "type": MessageCodes.STATE_CHANGED.value,
-                    "state": UserState.DISCONNECTED.value,
-                    "login": user.login
-                }))
-                if item.remove_user(user=user) is None:
-                    self._users.pop(login)
+                self._users[login] = item.remove_user(user=self)
 
+    def disconnect_users(self):
+        with self.mutex:
+            for user in self._users:
+                user.close()
     def send_message(self, message, sender):
         with self.mutex:
             for login, user in self._users.items():
@@ -404,8 +443,24 @@ if __name__ == "__main__":
         (r'/websocket', UserLeaf),
         (r'/(.*)', web.StaticFileHandler, {'path': os.path.join(os.getcwd(), 'web')})
     ])
-    app.listen(port=3000)
+    try:
+        app.listen(port=3000)
+    except OSError:
+        print("Address already in use")
+        sys.exit(1)
+    except Exception as ex:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
     dao.UserDAO.create_table()
     dao.MessageDAO.create_table()
     dao.FriendDAO.create_table()
-    ioloop.IOLoop.instance().start()
+    print("Listening on 0.0.0.0:3000")
+    try:
+        ioloop.IOLoop.instance().start()
+    except KeyboardInterrupt:
+        print("Closing the server")
+        Socket().disconnect_users()
+        sys.exit(0)
+
+

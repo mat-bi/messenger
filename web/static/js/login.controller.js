@@ -5,6 +5,13 @@ $(document).ready(function () {
     $(".wrapper").hide();
     var socket = new WebSocket("ws://127.0.0.1:3000/websocket");
 
+    /*$(window).unload(function(){
+        socket.close();
+    });*/
+    /*$(window).beforeunload(function () {
+        socket.close();
+    });*/
+
     $('#register_btn').click(function (e) {
         e.preventDefault();
 
@@ -19,6 +26,29 @@ $(document).ready(function () {
 
         socket.send(JSON.stringify(register));
         socket.send(JSON.stringify({"type" : 9}));
+    });
+    $("#add_friend_text").on('input',function () {
+       var user = $(this).val();
+        socket.send(JSON.stringify({"type": 7, "login": user}))
+    });
+
+    var friend_function = function () {
+        var friendLogin = $("#add_friend_text").val();
+        if (friendLogin.replace(/\s/g, "") == "") return;
+
+        var message = {
+            "type": 5,
+            "login": friendLogin
+        };
+
+        socket.send(JSON.stringify(message));
+
+
+        $("#add_friend_text").val('');
+    };
+    $("#friend_form").submit(function (e) {
+        e.preventDefault();
+        friend_function();
     });
 
     $('#login_btn').click(function (e) {
@@ -55,34 +85,14 @@ $(document).ready(function () {
         $("#text").val('');
     });
 
-    $('#add_friend').click(function () {
-        var friendLogin = $("#add_friend_text").val();
-        if (friendLogin.replace(/\s/g, "") == "") return;
-
-        var message = {
-            "type": 5,
-            "login": friendLogin
-        };
-
-        socket.send(JSON.stringify(message));
-        $(".li-placeholder").before(
-            "<li class=\"person\" data-chat=\"person2\">" +
-                "<img src='" + getRandomImage() + "' alt=\"\"/>" +
-                "<span class=\"name\">" + friendLogin + "</span>" +
-                "<span class=\"time\">1:44 PM</span>" +
-                "<span class=\"preview\">&nbsp;</span>" +
-            "</li>"
-        );
-
-        $("#add_friend_text").val('');
-    });
+    $('#add_friend').click(friend_function);
 
     var addToFriendList = function (login, state) {
         var active = "Active",
             disconnected = "Disconnected";
 
         $(".li-placeholder").before(
-            "<li class=\"person\" data-chat=\"person2\">" +
+            "<li class=\"person\" id=\"person_"+login+"\" data-chat=\"person2\">" +
                 "<img src='" + getRandomImage() + "' alt=\"\"/>" +
                 "<span class=\"name\">" + login + "<br></span>" +
                 "<span class=\"time\">1:44 PM</span>" +
@@ -135,8 +145,41 @@ $(document).ready(function () {
                 $(".module").hide();
                 $(".pen-title").hide();
                 break;
+
             case 7:
                 toastr.info('Friend added!');
+                var user = JSON.parse(message.data).user;
+                var state = (user.state == 0) ? "Active":"Disconnected";
+                $(".li-placeholder").before(
+            "<li class=\"person\" id=\"person_"+user.login+"\" data-chat=\"person2\">" +
+                "<img src=\"" + getRandomImage() + "\"/>" +
+                "<span class=\"name\">" + user.login + "<br/></span>" +
+                "<span class=\"time\">1:44 PM</span>" +
+                "<span class=\"preview\">"+ state +"</span>" +
+            "</li>"
+        );
+                break;
+            case 8:
+                var user = JSON.parse(message.data);
+                console.log(user);
+                var state = (user.state == 0) ? "Active":"Disconnected";
+                $("#person_"+user.login).children(".preview").text(state);
+                var text = user.login
+                text += " became ";
+                text += state.toLowerCase();
+                toastr.info(text);
+                break;
+            case 9:
+                var users = JSON.parse(message.data).users;
+                var datalist = $("#friends_list");
+                datalist.empty();
+                for(var i = 0; i < users.length; i++){
+                    datalist.append("<option value=\""+users[i]+"\"/>");
+                }
+                break;
+            case 10:
+                $("#friends_list").empty();
+                toastr.error("No user found");
                 break;
             case 12:
                 $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "" +
@@ -153,6 +196,12 @@ $(document).ready(function () {
                 $('.name').text(localStorage.getItem("currentUser"));
                 var msg = {"type" : 8, "login" : localStorage.getItem("currentUser")};
                 socket.send(JSON.stringify(msg));
+                break;
+            case 15:
+                toastr.error("User doesn't exist!");
+                break;
+            case 16:
+                toastr.error("Friendship exists!");
                 break;
             default:
                 console.log(responseCode + '- kod do obsluzenia');

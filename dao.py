@@ -6,6 +6,17 @@ from connection import FetchOne, InsertOne, transaction, FetchNone, FetchAll
 from dto import User, Message
 
 
+class UserDaoException(Exception):
+    pass
+class NotAUser(UserDaoException):
+
+    def __init__(self, login):
+        self._login = login
+
+    @property
+    def login(self):
+        return self._login
+
 class NoDAOTable(Exception):
     pass
 
@@ -85,6 +96,13 @@ class FriendDAO(DAO):
     @staticmethod
     def add_friend(user, friend, conn=None):
         conn.begin_transaction(exclusive=True)
+        logins = UserDAO.check_if_users_exist(logins=[user.login, friend.login], conn=conn)
+        if user.login not in logins or friend.login not in logins:
+            conn.rollback()
+            if user.login not in logins:
+                raise NotAUser(login=user.login)
+            else:
+                raise NotAUser(login=friend.login)
         row = conn.exec(query="SELECT friend1,friend2 FROM FRIEND WHERE friend1=? AND friend2=?", params=(user.login, friend.login), opts=FetchOne)
         if row is None:
             conn.exec(query="INSERT INTO Friend(friend1, friend2) VALUES(?,?)", params=(user.login, friend.login))
@@ -147,6 +165,12 @@ class UserDAO(DAO):
             return UserDAO._create_user(user=user)
 
     @staticmethod
+    @transaction
+    def check_if_users_exist(logins, conn=None):
+        users = conn.exec(query="SELECT login FROM USER WHERE login IN(?,?)", params=logins, opts=FetchAll)
+        return [user[0] for user in users]
+
+    @staticmethod
     def register(login, password, conn=None):
         conn.begin_transaction(exclusive=True)
         user = conn.exec(query="SELECT login,password, status FROM User WHERE login=?;", params=(login,), opts=FetchOne)
@@ -173,7 +197,7 @@ class UserDAO(DAO):
     @return_users
     @transaction
     def find_users(login, excluded_login='', conn=None):
-        return conn.exec(query="SELECT login, password, status FROM User WHERE login LIKE (?|| '%') AND LOGIN != ?", params=(login, excluded_login), opts=FetchAll)
+        return conn.exec(query="SELECT login, password, status FROM User WHERE login LIKE (?|| '%') AND LOGIN != ? AND LOGIN NOT IN(SELECT friend2 FROM FRIEND WHERE friend1=?)", params=(login, excluded_login, excluded_login), opts=FetchAll)
 
 
     '''@staticmethod

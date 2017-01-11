@@ -54,8 +54,11 @@
     <div class="container">
         <div class="left">
             <div class="top">
-                <input id="add_friend_text" type="text"/>
+                <form id="friend_form">
+                    <input id="add_friend_text" list="friends_list" type="text"/>
+                    <datalist id="friends_list"></datalist>
                 <a type="submit" href="javascript:;" id="add_friend" class="search"></a>
+                    </form>
             </div>
             <ul class="people">
                 <li class="li-placeholder"></li>
