@@ -378,6 +378,7 @@ body {
   -moz-animation-name: slideFromLeft;
   -webkit-animation-name: slideFromLeft;
   animation-name: slideFromLeft;
+  margin-left: 20px;
 }
 .container .right .bubble.you:before {
   left: -3px;
@@ -392,6 +393,7 @@ body {
   -moz-animation-name: slideFromRight;
   -webkit-animation-name: slideFromRight;
   animation-name: slideFromRight;
+  margin-right: 15px;
 }
 .container .right .bubble.me:before {
   right: -3px;
@@ -402,6 +404,7 @@ body {
   width: 100%;
   margin-bottom: 27px;
   text-align: center;
+  margin-top: 15px;
 }
 .container .right .conversation-start span {
   font-size: 14px;
@@ -482,4 +485,11 @@ body {
 .credits a {
   color: white;
   text-decoration: none;
+}
+
+.scroll-wrapper {
+    height: 500px;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    width: 460px;
 }

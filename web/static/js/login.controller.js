@@ -70,6 +70,7 @@ $(document).ready(function () {
         socket.send(JSON.stringify(message));
 
         $(".placeholder").before("<div class=\"bubble me\">" + text + "</div>");
+        scrollToBottom();
         $("#text").val('');
     }
 
@@ -124,6 +125,10 @@ $(document).ready(function () {
     socket.onopen = function (message) {
         console.log('open');
     };
+
+    function scrollToBottom() {
+        $('.scroll-wrapper').animate({scrollTop: $('.scroll-wrapper').prop('scrollHeight')});
+    }
 
     socket.onmessage = function (message) {
         var response = JSON.parse(message.data);
@@ -189,7 +194,8 @@ $(document).ready(function () {
                 break;
             case 12:
                 $(".placeholder").before("<div class=\"bubble you\">" + response.message.content + "" +
-                    "</div><span style='font-size: 10px'>Sent by: " + response.message.user + "</span>");
+                    "<span style='font-size: 10px'><br>Sent by: " + response.message.user + "</span></div>");
+                scrollToBottom();
                 break;
             case 13:
                 var friends = JSON.parse(message.data).friends;
