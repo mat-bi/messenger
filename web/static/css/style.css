@@ -107,6 +107,7 @@ body {
   width: -o-calc(100% + 2px);
   width: calc(100% + 2px);
   overflow-y: scroll;
+  overflow-x: scroll;
   height: 500px;
 }
 .container .left .people .person {
