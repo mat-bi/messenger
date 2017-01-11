@@ -149,6 +149,7 @@ $(document).ready(function () {
             case 7:
                 toastr.info('Friend added!');
                 var user = JSON.parse(message.data).user;
+                $("#friends_list").empty();
                 var state = (user.state == 0) ? "Active":"Disconnected";
                 $(".li-placeholder").before(
             "<li class=\"person\" id=\"person_"+user.login+"\" data-chat=\"person2\">" +
