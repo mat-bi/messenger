@@ -200,7 +200,7 @@ $(document).ready(function () {
                     var text = $(span).prev().text();
                     $(span).before(text + "<br>" + response.message.content);
                 } else {
-                    $(".placeholder").before("<div class=\"bubble you\" >" + response.message.content + "" +
+                    $(".placeholder").before("<div class=\"bubble you baby-dont-break-me\" >" + response.message.content + "" +
                     "<span style='font-size: 10px'><br>Sent by: " + response.message.user + "</span></div>");
                 }
                 scrollToBottom();
