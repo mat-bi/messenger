@@ -106,6 +106,8 @@ body {
   width: -webkit-calc(100% + 2px);
   width: -o-calc(100% + 2px);
   width: calc(100% + 2px);
+  overflow-y: scroll;
+  height: 500px;
 }
 .container .left .people .person {
   position: relative;
