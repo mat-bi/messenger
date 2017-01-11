@@ -2,7 +2,7 @@
  * Created by micha on 10.01.2017.
  */
 $(document).ready(function () {
-    var socker;
+    var previousUser = "";
     $(".wrapper").hide();
     var socket = new WebSocket("ws://"+window.location.host+"/websocket");
 
@@ -194,17 +194,17 @@ $(document).ready(function () {
                 toastr.error("No user found");
                 break;
             case 12:
-                if(socker === response.message.user){
+                if(previousUser === response.message.user){
                     var previousDiv = $(".placeholder").prev("div");
                     var span = $(previousDiv).find("span");
                     var text = $(span).prev().text();
-                    $(span).before(text + "\n" + response.message.content);
+                    $(span).before(text + "<br>" + response.message.content);
                 } else {
                     $(".placeholder").before("<div class=\"bubble you\" >" + response.message.content + "" +
                     "<span style='font-size: 10px'><br>Sent by: " + response.message.user + "</span></div>");
                 }
                 scrollToBottom();
-                socker = response.message.user;
+                previousUser = response.message.user;
                 break;
             case 13:
                 var friends = JSON.parse(message.data).friends;
