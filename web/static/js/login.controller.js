@@ -3,14 +3,7 @@
  */
 $(document).ready(function () {
     $(".wrapper").hide();
-    var socket = new WebSocket("ws://127.0.0.1:3000/websocket");
-
-    /*$(window).unload(function(){
-        socket.close();
-    });*/
-    /*$(window).beforeunload(function () {
-        socket.close();
-    });*/
+    var socket = new WebSocket("ws://"+window.location.host+"/websocket");
 
     $('#register_btn').click(function (e) {
         e.preventDefault();
@@ -74,9 +67,7 @@ $(document).ready(function () {
 
         var message = {
             "type": 2,
-            "message": {
-                "content": text
-            }
+            "content": text
         };
 
         socket.send(JSON.stringify(message));
@@ -195,7 +186,7 @@ $(document).ready(function () {
             case 14:
                 localStorage.setItem("currentUser", JSON.parse(message.data).user.login);
                 $('.name').text(localStorage.getItem("currentUser"));
-                var msg = {"type" : 8, "login" : localStorage.getItem("currentUser")};
+                var msg = {"type" : 8};
                 socket.send(JSON.stringify(msg));
                 break;
             case 15:

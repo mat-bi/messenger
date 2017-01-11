@@ -10,6 +10,41 @@ from dto import Message
 import threading
 from abc import ABC, abstractmethod
 
+class MessageTypes(enum.Enum):
+    LOGIN = 0
+    REGISTER = 1
+    INCOMING_MESSAGE = 2
+    #UNRECOGNIZED_MESSAGE = 3
+    CHANGE_STATUS = 4
+    ADD_FRIEND = 5
+    REMOVE_FRIEND = 6
+    FIND_USERS = 7
+    FETCH_FRIENDS = 8
+    LOGGED_USER = 9
+    LOGOUT = 100
+
+
+
+class MessageCodes(enum.Enum):
+    UNRECOGNIZED_MESSAGE = 0
+    SEND_CREDENTIALS = 1
+    WRONG_CREDENTIALS = 2
+    LOGGED_IN = 3
+    LOGIN_TAKEN = 4
+    USER_REGISTERED = 5
+    STATUS_CHANGED = 6
+    FRIEND_ADDED = 7
+    STATE_CHANGED = 8
+    USERS_FOUND = 9
+    USERS_NOT_FOUND = 10
+    MESSAGE_RECEIVED = 11
+    INCOMING_MESSAGE = 12
+    FRIENDS_FETCHED = 13
+    LOGGED_USER = 14
+    FRIEND_DOESNT_EXIST = 15
+    FRIENDSHIP_EXISTS = 16
+    ACCESS_RESTRICTED = 50
+    LOGGED_OUT = 100
 
 class InvalidMessage(Exception):
     pass
@@ -58,24 +93,261 @@ class User(ABC):
 from tornado import websocket
 
 
+class Controller(ABC):
+    def __init__(self, login, context):
+        self._login = login
+        self._context = context
+
+    @property
+    def login(self):
+        return self._login
+
+    @property
+    def context(self):
+        return self._context
+
+class LoginObject:
+    def __init__(self, login=None, content=None):
+        self._content = content
+        if login is not None:
+            self._login = login
+            self._logged = True
+        else:
+            self._logged = False
+            self._login = None
+
+    def log_in(self, login):
+        self.login = login
+        self._logged = True
+
+    @property
+    def content(self):
+        return self._content
+
+    @property
+    def logged(self):
+        return self._logged
+
+    @property
+    def login(self):
+        return self._login
+
+    @login.setter
+    def login(self, value):
+        self._login = value
+
+    def log_out(self):
+        self._login = None
+        self._logged = False
+
+
+class ReturnView:
+    def __init__(self, **kwargs):
+        self.fields = kwargs
+        self.__dict__.update(kwargs)
+
+class AccessRestricted(Exception):
+    pass
+
+def logged(func):
+    def func_wrapper(self, *args, **kwargs):
+        if self.login.logged is True:
+            f = func(self, *args, **kwargs)
+        else:
+            raise AccessRestricted()
+        return f
+    return func_wrapper
+
+def unlogged(func):
+    def func_wrapper(self, *args, **kwargs):
+        if self.login.logged is False:
+            f = func(self, *args, **kwargs)
+        else:
+            raise AccessRestricted()
+        return f
+    return func_wrapper
+
+class LoggedInController(Controller):
+    @unlogged
+    def action(self, login, password):
+        user = dao.UserDAO.login(login=login, password=password)  # tries to get the user from the database
+        if user is None:  # no such a user
+            return ReturnView(type=MessageCodes.WRONG_CREDENTIALS)  # it means that the credentials are wrong
+        else:  # DB returned a row
+            friends = [{"login": friend.login, "status": friend.status,
+                        "state": Socket().get_state(login=friend.login).value} for friend in
+                        user.friends]  # gets all friends of the current user
+            logins = [user.login for user in
+                        dao.FriendDAO.get_users_added_as_friend(user=dto.User(
+                              login=login))]  # gets all the users that added the current user as a friend
+            Socket().add_observer(login=logins,
+                                      observer=self.context)  # the socket object has the list of current connected users, we use it to connect the objects in the observator pattern
+            self.login.log_in(login=login)
+            Socket().add_user(user=user, leaf=self.context)
+            return ReturnView(type=MessageCodes.LOGGED_IN,
+                              friends=friends)  # writes a message to the client, to inform it that the log-in was successful
+
+class RegisterController(Controller):
+    @unlogged
+    def action(self, login, password):
+        import connection
+        conn = connection.ConnectionPool.get_connection()
+        user = dao.UserDAO.register(login=login, password=password, conn=conn)
+        connection.ConnectionPool.release_connection(conn)
+
+        if user is None:  # a user with the provided login exists
+            return ReturnView(type=MessageCodes.LOGIN_TAKEN)
+        else:  # no user with the provided login, the registration was successful, so we can log the user in
+            self.login.log_in(login=login)
+            Socket().add_user(user=user, leaf=self.context)
+            return ReturnView(type=MessageCodes.USER_REGISTERED)
+
+class IncomingMessageController(Controller):
+    @logged
+    def action(self, content):
+        from datetime import datetime
+        from DBList import DBObject
+        message = Message(content=content,
+                          creation_date=datetime.now().timestamp(),
+                          user=DBObject(func=dao.UserDAO.get_user, login=self.login.login))
+        message = dao.MessageDAO.add_message(message=message)
+        Socket().send_message(ReturnView(type=MessageCodes.INCOMING_MESSAGE,
+            message= {
+                "user": message.user.login,
+                "creation_date": message.creation_date.timestamp(),
+                "content": message.content,
+                "id_message": message.id_message
+            }
+        ), sender=self.context)
+        return ReturnView(type=MessageCodes.MESSAGE_RECEIVED,
+                          id_message=message.id_message)
+
+class ChangeStatusController(Controller):
+    @logged
+    def action(self, status):
+        user = dto.User(status=status, login=self.login.login)
+        dao.UserDAO.change_status(user=user)
+        self.context.send_notification(
+            notification=ReturnView(type=MessageCodes.STATUS_CHANGED, user={
+                "login": self.login,
+                "status": status
+            }))
+        return None
+
+class AddFriendController(Controller):
+    @logged
+    def action(self, login):
+        import connection
+        conn = connection.ConnectionPool.get_connection()
+        try:
+            added = dao.FriendDAO.add_friend(user=dto.User(login=self.login.login),
+                                             friend=dto.User(login=login), conn=conn)
+        except dao.NotAUser as ex:
+            if ex.login is self.login:
+                raise Exception()
+            else:
+                return ReturnView(type=MessageCodes.FRIEND_DOESNT_EXIST)
+        else:
+            if added is True:
+                Socket().add_observer(login=login, observer=self.context)
+                return ReturnView(
+                    type=MessageCodes.FRIEND_ADDED,
+                    user={
+                        "login": login,
+                        "state": Socket().get_state(login=login).value
+                    })
+            else:
+                return ReturnView(
+                    type=MessageCodes.FRIENDSHIP_EXISTS
+                )
+        finally:
+            connection.ConnectionPool.release_connection(conn=conn)
+
+class RemoveFriendController(Controller):
+    @logged
+    def action(self, login):
+        dao.FriendDAO.remove_friends(user=dto.User(login=self.login.login),
+                                     friend=dto.User(login=login))
+        Socket().remove_observer(login=login, observer=self.context)
+        return None
+
+class RemoveUserController(Controller):
+    @logged
+    def action(self, login):
+        dao.FriendDAO.remove_friends(user=dto.User(login=self.login.login),
+                                     friend=dto.User(login=login))
+        Socket().remove_observer(login=login, observer=self.context)
+
+class FindUsersController(Controller):
+    @logged
+    def action(self, login):
+        users = [user.login for user in
+                 dao.UserDAO.find_users(login=login, excluded_login=self.login.login)]
+        if len(users) is 0:
+            return ReturnView(type=MessageCodes.USERS_NOT_FOUND)
+        else:
+            return ReturnView(type=MessageCodes.USERS_FOUND, users=users)
+
+class FetchFriendsController(Controller):
+    @logged
+    def action(self):
+        friends = [
+            {"login": user.login, "status": user.status, "state": Socket().get_state(user.login).value}
+            for user in dao.FriendDAO.get_friends(user=dto.User(login=self.login.login))]
+        return ReturnView(type=MessageCodes.FRIENDS_FETCHED, friends=friends)
+
+class LoggedUserController(Controller):
+    @logged
+    def action(self):
+        user = dao.UserDAO.get_user(login=self.login.login)
+        return ReturnView(type=MessageCodes.LOGGED_USER, user={
+            "login": user.login,
+            "status": user.status
+        })
+
+class LogOutController(Controller):
+    @logged
+    def action(self):
+        self.login.logout()
+        return ReturnView(type=MessageTypes.LOGOUT)
+
+controllers = {
+    MessageTypes.LOGIN: LoggedInController,
+    MessageTypes.REGISTER: RegisterController,
+    MessageTypes.INCOMING_MESSAGE: IncomingMessageController,
+    MessageTypes.CHANGE_STATUS: ChangeStatusController,
+    MessageTypes.ADD_FRIEND: AddFriendController,
+    MessageTypes.REMOVE_FRIEND: RemoveFriendController,
+    MessageTypes.FIND_USERS: FindUsersController,
+    MessageTypes.LOGGED_USER: LoggedUserController,
+    MessageTypes.LOGOUT: LogOutController,
+    MessageTypes.FETCH_FRIENDS: FetchFriendsController
+}
+
+
+
 class UserLeaf(User, websocket.WebSocketHandler):
     def send_message(self, message, sender):
-        if sender is not self:
+        if sender is not self:  # the user that sent the message shouldn't become the message
             with self.mutex:
-                self.write_message(message=message)
+                if isinstance(message.type, MessageCodes):
+                    message.fields['type'] = message.type.value
+                self.write_message(message=message.fields)
 
     def send_notification(self, notification):
         with self.mutex_observer:
-            for observer in self.observers:
-                observer.notify(notification=notification)
+            for observer in self.observers:  # iterate over the observers
+                if isinstance(notification.type, MessageCodes):
+                    notification.fields['type'] = notification.type.value
+                observer.notify(notification=notification.fields)  # notify the observer
 
     def notify(self, notification):
         with self.mutex:
-            self.write_message(notification)
+            self.write_message(notification)  # send notification
 
     def register_observer(self, observer):
         with self.mutex_observer:
-            self.observers.append(observer)
+            self.observers.append(observer)  # add an observer to the object
 
     def unregister_observer(self, observer):
         with self.mutex_observer:
@@ -86,6 +358,7 @@ class UserLeaf(User, websocket.WebSocketHandler):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.login = LoginObject()
         self.observers = []
         self.mutex = threading.RLock()
         self.mutex_observer = threading.RLock()
@@ -99,155 +372,62 @@ class UserLeaf(User, websocket.WebSocketHandler):
         return message
 
     def _no_login_or_password(self, message):
-        if 'login' not in message or 'password' not in message:
+        if 'login' not in message or 'password' not in message:  # it means that the message is incomplete, the server cannot accept it
             with self.mutex:
                 self.write_message(self._unrecognized_message())
                 return False
         return True
 
+    def log_in(self, user):
+        self.login = user.login # the object should store the login of the current user
+        self.authenticated = True # indicator - means that there is a logged user in the current connection
+        Socket().add_user(user=user,
+                          leaf=self)  # adds the current user to the singleton, as a result the current object will be notified on every message
+
+    def message_login(self, message):
+        pass
+
+    def message_register(self, message):
+        pass
+
+
+    def message_incoming_message(self, message):
+        pass
+
+    def message_change_status(self, message):
+        pass
+
     def on_message(self, message):
         with self.mutex:
             try:
-                message = MessageParser.parse(message=message)
-            except InvalidMessage:
-                self.write_message(self._unrecognized_message())
+                message = MessageParser.parse(message=message)  # tries to parse the received message
+            except InvalidMessage:  # it's impossible
+                self.write_message(self._unrecognized_message())  # client is notified
             else:
-                if self.authenticated is False:
-                    if message['type'] == MessageTypes.LOGIN.value:
-                        if self._no_login_or_password(message=message):
-                            user = dao.UserDAO.login(login=message['login'], password=message['password'])
-                            if user is None:
-                                self.write_message(self.build_message(type=MessageCodes.WRONG_CREDENTIALS.value))
-                            else:
-                                self.login = user.login
-                                self.authenticated = True
-                                friends = []
-                                for friend in user.friends:
-                                    friends.append({"login": friend.login, "status": friend.status,
-                                                    "state": Socket().get_state(login=friend.login).value})
-                                self.write_message(
-                                    self.build_message(type=MessageCodes.LOGGED_IN.value, friends=friends))
-                                logins = [user.login for user in
-                                          dao.FriendDAO.get_users_added_as_friend(user=dto.User(login=self.login))]
-                                Socket().add_observer(login=logins, observer=self)
-                                Socket().add_user(user=user, leaf=self)
-
-                    elif message['type'] == MessageTypes.REGISTER.value:
-                        if self._no_login_or_password(message=message):
-                            import connection
-                            conn = connection.ConnectionPool.get_connection()
-                            user = dao.UserDAO.register(login=message['login'], password=message['password'], conn=conn)
-                            connection.ConnectionPool.release_connection(conn)
-
-                            if user is None:
-                                self.write_message(self.build_message(type=MessageCodes.LOGIN_TAKEN.value))
-                            else:
-                                self.write_message(self.build_message(type=MessageCodes.USER_REGISTERED.value))
-                                Socket().add_user(user=user, leaf=self)
-                                self.login = user.login
-                                self.authenticated = True
-                else:
-                    if message['type'] == MessageTypes.INCOMING_MESSAGE.value:
-                        from datetime import datetime
-                        from DBList import DBObject
-                        message = Message(content=message['message']['content'],
-                                          creation_date=datetime.now().timestamp(),
-                                          user=DBObject(func=dao.UserDAO.get_user, login=self.login))
-                        message = dao.MessageDAO.add_message(message=message)
-                        self.write_message(message={
-                            "type": MessageCodes.MESSAGE_RECEIVED.value,
-                            "id_message": message.id_message
-                        })
-                        Socket().send_message(message=json.dumps(obj={
-                            "type": MessageCodes.INCOMING_MESSAGE.value,
-                            "message": {
-                                "user": message.user.login,
-                                "creation_date": message.creation_date.timestamp(),
-                                "content": message.content,
-                                "id_message": message.id_message
-                            }
-                        }), sender=self)
-                    elif message['type'] == MessageTypes.CHANGE_STATUS.value:
-                        user = dto.User(status=message['status'], login=self.login)
-                        dao.UserDAO.change_status(user=user)
-                        self.send_notification(
-                            notification=json.dumps({"type": MessageCodes.STATUS_CHANGED.value, "user": {
-                                "login": self.login,
-                                "status": message['status']
-                            }}))
-
-                    elif message['type'] == MessageTypes.ADD_FRIEND.value:
-                        import connection
-                        conn = connection.ConnectionPool.get_connection()
-                        try:
-                            added = dao.FriendDAO.add_friend(user=dto.User(login=self.login),
-                                                        friend=dto.User(login=message['login']), conn=conn)
-                        except dao.NotAUser as ex:
-                            if ex.login is self.login:
-                                self.close(code=1008)
-                            else:
-                                self.write_message(message=json.dumps({
-                                    "type": MessageCodes.FRIEND_DOESNT_EXIST.value
-                                }))
-                        else:
-                            if added is True:
-                                self.write_message(message=json.dumps({
-                                    "type": MessageCodes.FRIEND_ADDED.value,
-                                    "user": {
-                                        "login": message['login'],
-                                        "state": Socket().get_state(login=message['login']).value
-                                    }
-                                }))
-                                Socket().add_observer(login=message['login'], observer=self)
-                            else:
-                                self.write_message(message=json.dumps({
-                                    "type": MessageCodes.FRIENDSHIP_EXISTS.value
-                                }))
-                    elif message['type'] == MessageTypes.REMOVE_FRIEND.value:
-                        dao.FriendDAO.remove_friends(user=dto.User(login=self.login),
-                                                     friend=dto.User(login=message['login']))
-                        Socket().remove_observer(login=message['login'], observer=self)
-                    elif message['type'] == MessageTypes.FIND_USERS.value:
-                        users = [user.login for user in
-                                 dao.UserDAO.find_users(login=message['login'], excluded_login=self.login)]
-                        return_message = {}
-                        if len(users) is 0:
-                            return_message['type'] = MessageCodes.USERS_NOT_FOUND.value
-                        else:
-                            return_message['type'] = MessageCodes.USERS_FOUND.value
-                            return_message['users'] = users
-                        self.write_message(json.dumps(return_message))
-                    elif message['type'] == MessageTypes.FETCH_FRIENDS.value:
-                        friends = [{"login": user.login, "status": user.status, "state": Socket().get_state(user.login).value} for user in dao.FriendDAO.get_friends(user=dto.User(login=self.login))]
-                        self.write_message(message=json.dumps({
-                            "type": MessageCodes.FRIENDS_FETCHED.value,
-                            "friends": friends
-                        }))
-                    elif message['type'] == MessageTypes.LOGGED_USER.value:
-                        user = dao.UserDAO.get_user(login=self.login)
-                        self.write_message(message=json.dumps({
-                            "type": MessageCodes.LOGGED_USER.value,
-                            "user": {
-                                "login": user.login,
-                                "status": user.status
-                            }
-                        }))
-                    elif message['type'] == MessageTypes.LOGOUT.value:
-                        del self.login
-                        self.authenticated = False
-                        self.write_message(message=json.dumps({
-                            "type": MessageCodes.LOGGED_OUT.value
-                        }))
-
+                try:
+                    controller = controllers.get(MessageTypes(message['type']))
+                    controller = controller(login=self.login, context=self)
+                    del message['type']
+                    return_value = controller.action(**message)
+                    if return_value is not None:
+                        if isinstance(return_value, ReturnView):
+                            if isinstance(return_value.type, MessageCodes):
+                                return_value.fields['type'] = return_value.type.value
+                            elif isinstance(return_value.type, int) is False:
+                                raise Exception()
+                            self.write_message(message=return_value.fields)
+                except ValueError:
+                    self.write_message(self.build_message(type=MessageCodes.UNRECOGNIZED_MESSAGE.value))
+                except AccessRestricted:
+                    self.write_message(self.build_message(type=MessageCodes.ACCESS_RESTRICTED.value))
 
     def on_close(self, code=None, reason=None):
         with self.mutex:
-            if self.authenticated is True:
-                Socket().remove_user(user=self, login=self.login)
+            if self.login.logged is True:
+                Socket().remove_user(user=self, login=self.login.login)
 
 
 class UserComposite(User):
-
     def __len__(self):
         with self.mutex:
             return len(self._users)
@@ -274,7 +454,7 @@ class UserComposite(User):
                 return self
 
     def notify(self, notification):
-        self._iterate(func=lambda user: user.notify())
+        self._iterate(func=lambda user: user.notify(notification=notification))
 
     def register_observer(self, observer):
         self._iterate(func=lambda user: user.register_observer(observer=observer))
@@ -296,39 +476,7 @@ class NoUser(Exception):
 SOCKET_BUFF = 4096
 
 
-class MessageTypes(enum.Enum):
-    LOGIN = 0
-    REGISTER = 1
-    INCOMING_MESSAGE = 2
-    UNRECOGNIZED_MESSAGE = 3
-    CHANGE_STATUS = 4
-    ADD_FRIEND = 5
-    REMOVE_FRIEND = 6
-    FIND_USERS = 7
-    FETCH_FRIENDS = 8
-    LOGGED_USER = 9
-    LOGOUT = 100
 
-
-class MessageCodes(enum.Enum):
-    UNRECOGNIZED_MESSAGE = 0
-    SEND_CREDENTIALS = 1
-    WRONG_CREDENTIALS = 2
-    LOGGED_IN = 3
-    LOGIN_TAKEN = 4
-    USER_REGISTERED = 5
-    STATUS_CHANGED = 6
-    FRIEND_ADDED = 7
-    STATE_CHANGED = 8
-    USERS_FOUND = 9
-    USERS_NOT_FOUND = 10
-    MESSAGE_RECEIVED = 11
-    INCOMING_MESSAGE = 12
-    FRIENDS_FETCHED = 13
-    LOGGED_USER = 14
-    FRIEND_DOESNT_EXIST = 15
-    FRIENDSHIP_EXISTS = 16
-    LOGGED_OUT = 100
 
 
 def singleton(cls):
@@ -380,11 +528,11 @@ class Socket(object):
             item = self._users.get(user.login)
             if item is None:
                 item = leaf
-                leaf.send_notification(notification=json.dumps({
-                    "type": MessageCodes.STATE_CHANGED.value,
-                    "state": UserState.ACTIVE.value,
-                    "login": user.login
-                }))
+                leaf.send_notification(notification=ReturnView(
+                    type=MessageCodes.STATE_CHANGED,
+                    state=UserState.ACTIVE.value,
+                    login=user.login
+                ))
             elif isinstance(item, UserLeaf):
                 item2 = UserComposite()
                 item2.add_user(user=item)
@@ -394,13 +542,12 @@ class Socket(object):
                 item.add_user(user=leaf)
             self._users[user.login] = item
 
-
     def _send_disconnected(self, user):
-        user.send_notification(notification=json.dumps({
-            "type": MessageCodes.STATE_CHANGED.value,
-            "state": UserState.DISCONNECTED.value,
-            "login": user.login
-        }))
+        user.send_notification(notification=ReturnView(
+            type=MessageCodes.STATE_CHANGED,
+            state=UserState.DISCONNECTED.value,
+            login=user.login.login
+        ))
 
     def unregister_observer(self, user):
         with self.mutex:
@@ -416,12 +563,13 @@ class Socket(object):
                 self._send_disconnected(user=user)
                 del self._users[login]
             elif isinstance(item, UserComposite):
-                self._users[login] = item.remove_user(user=self)
+                self._users[login] = item.remove_user(user=user)
 
     def disconnect_users(self):
         with self.mutex:
-            for user in self._users:
+            for login, user in self._users.items():
                 user.close()
+
     def send_message(self, message, sender):
         with self.mutex:
             for login, user in self._users.items():
@@ -462,5 +610,7 @@ if __name__ == "__main__":
         print("Closing the server")
         Socket().disconnect_users()
         sys.exit(0)
-
-
+    except:
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
