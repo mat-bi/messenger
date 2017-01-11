@@ -20,6 +20,7 @@ $(document).ready(function () {
         socket.send(JSON.stringify(register));
         socket.send(JSON.stringify({"type" : 9}));
     });
+
     $("#add_friend_text").on('input',function () {
        var user = $(this).val();
         socket.send(JSON.stringify({"type": 7, "login": user}))
@@ -60,11 +61,7 @@ $(document).ready(function () {
         socket.send(JSON.stringify({"type" : 9}));
     });
 
-    $('#send').click(function (e) {
-        e.preventDefault();
-        var text = $("#text").val();
-        if (text.replace(/\s/g, "") == "") return;
-
+    function sendMessage(text) {
         var message = {
             "type": 2,
             "content": text
@@ -74,6 +71,24 @@ $(document).ready(function () {
 
         $(".placeholder").before("<div class=\"bubble me\">" + text + "</div>");
         $("#text").val('');
+    }
+
+    $('#send').click(function (e) {
+        e.preventDefault();
+        var text = $("#text").val();
+        if (text.replace(/\s/g, "") == "") return;
+
+        sendMessage(text);
+    });
+
+    $('#text').on('keypress', function (e) {
+        var text = $("#text").val();
+        if (text.replace(/\s/g, "") == "") return;
+
+        if (e.which == 13) {
+            sendMessage(text);
+            return false;
+        }
     });
 
     $('#add_friend').click(friend_function);
