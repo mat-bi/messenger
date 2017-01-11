@@ -43,6 +43,7 @@ class MessageCodes(enum.Enum):
     LOGGED_USER = 14
     FRIEND_DOESNT_EXIST = 15
     FRIENDSHIP_EXISTS = 16
+    CANNOT_ADD_ITSELF = 17
     ACCESS_RESTRICTED = 50
     LOGGED_OUT = 100
 
@@ -240,6 +241,10 @@ class AddFriendController(Controller):
         import connection
         conn = connection.ConnectionPool.get_connection()
         try:
+            if self.login.login == login:
+                return ReturnView(
+                    type=MessageCodes.CANNOT_ADD_ITSELF
+                )
             added = dao.FriendDAO.add_friend(user=dto.User(login=self.login.login),
                                              friend=dto.User(login=login), conn=conn)
         except dao.NotAUser as ex:
@@ -347,11 +352,12 @@ class UserLeaf(User, websocket.WebSocketHandler):
 
     def register_observer(self, observer):
         with self.mutex_observer:
-            self.observers.append(observer)  # add an observer to the object
+            if self.observers.count(observer) is 0:
+                self.observers.append(observer)  # add an observer to the object
 
     def unregister_observer(self, observer):
         with self.mutex_observer:
-            if self.observers.get(observer) is not None:
+            if self.observers.count(observer) is 1:
                 self.observers.remove(observer)
                 return True
             return False
