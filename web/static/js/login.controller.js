@@ -12,6 +12,11 @@ $(document).ready(function () {
         var login = $("#login").val();
         var password = $("#password").val();
 
+        if (login.replace(/\s/g, "") == "" || password.replace(/\s/g, "") == "") {
+            toastr.error("Login or password cannot be empty");
+            return;
+        }
+
         var register = {
             "type": 1,
             "login": login,
@@ -55,6 +60,10 @@ $(document).ready(function () {
 
         var login = $("#log").val();
         var password = $("#pass").val();
+        if (login.replace(/\s/g, "") == "" || password.replace(/\s/g, "") == "") {
+            toastr.error("Login or password cannot be empty");
+            return;
+        }
 
         var log = {
             "type": 0,
