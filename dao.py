@@ -8,8 +8,9 @@ from dto import User, Message
 
 class UserDaoException(Exception):
     pass
-class NotAUser(UserDaoException):
 
+
+class NotAUser(UserDaoException):
     def __init__(self, login):
         self._login = login
 
@@ -17,22 +18,9 @@ class NotAUser(UserDaoException):
     def login(self):
         return self._login
 
+
 class NoDAOTable(Exception):
     pass
-
-
-def requires_table(table):
-    def requires_table_decorator(func):
-        def func_wrapper(conn, *args, **kwargs):
-            try:
-                globals()["{}DAO".format(table)].create_table(conn=conn)
-            except KeyError:
-                raise NoDAOTable()
-            return func(conn=conn, *args, **kwargs)
-
-        return func_wrapper
-
-    return requires_table_decorator
 
 
 class DAO(ABC):
@@ -45,7 +33,8 @@ class MessageDAO(DAO):
     @staticmethod
     def _create_message(message, conn):
         import datetime
-        return Message(id_message=message[0], content=message[1], creation_date=datetime.datetime.fromtimestamp(message[2]),
+        return Message(id_message=message[0], content=message[1],
+                       creation_date=datetime.datetime.fromtimestamp(message[2]),
                        user=DBObject(func=UserDAO.get_user, login=message[3]))
 
     @staticmethod
@@ -56,7 +45,7 @@ class MessageDAO(DAO):
                                              "(?,?,?)",
                                        params=(message.content, message.creation_date, message.user.login),
                                        opts=InsertOne)
-        message.user = DBObject(func=UserDAO.get_user, login =message.user.login)
+        message.user = DBObject(func=UserDAO.get_user, login=message.user.login)
         return message
 
     @staticmethod
@@ -75,6 +64,7 @@ class MessageDAO(DAO):
             query="CREATE TABLE IF NOT EXISTS Message(id_message INTEGER PRIMARY KEY, content TEXT, "
                   "creation_date TIMESTAMP , user TEXT, FOREIGN KEY (user) REFERENCES User);")
 
+
 def return_users(func):
     def func_wrapper(*args, **kwargs):
         users = func(*args, **kwargs)
@@ -82,16 +72,16 @@ def return_users(func):
         for user in users:
             return_value.append(UserDAO._create_user(user=user))
         return return_value
+
     return func_wrapper
 
 
 class FriendDAO(DAO):
-
     @staticmethod
     @transaction
     def create_table(conn=None):
-        conn.exec(query="CREATE TABLE IF NOT EXISTS Friend(friend1 TEXT, friend2 TEXT, FOREIGN KEY (friend1) REFERENCES User(login), FOREIGN KEY (friend2) REFERENCES User(login), PRIMARY KEY (friend1, friend2))")
-
+        conn.exec(
+            query="CREATE TABLE IF NOT EXISTS Friend(friend1 TEXT, friend2 TEXT, FOREIGN KEY (friend1) REFERENCES User(login), FOREIGN KEY (friend2) REFERENCES User(login), PRIMARY KEY (friend1, friend2))")
 
     @staticmethod
     def add_friend(user, friend, conn=None):
@@ -103,7 +93,8 @@ class FriendDAO(DAO):
                 raise NotAUser(login=user.login)
             else:
                 raise NotAUser(login=friend.login)
-        row = conn.exec(query="SELECT friend1,friend2 FROM FRIEND WHERE friend1=? AND friend2=?", params=(user.login, friend.login), opts=FetchOne)
+        row = conn.exec(query="SELECT friend1,friend2 FROM FRIEND WHERE friend1=? AND friend2=?",
+                        params=(user.login, friend.login), opts=FetchOne)
         if row is None:
             conn.exec(query="INSERT INTO Friend(friend1, friend2) VALUES(?,?)", params=(user.login, friend.login))
             conn.commit()
@@ -115,8 +106,9 @@ class FriendDAO(DAO):
     @return_users
     @transaction
     def get_users_added_as_friend(user, conn=None):
-        return conn.exec(query="SELECT U.login, U.password, U.status FROM Friend F JOIN User U ON U.login=f.friend1 WHERE F.friend2=?", params=(user.login,), opts=FetchAll)
-
+        return conn.exec(
+            query="SELECT U.login, U.password, U.status FROM Friend F JOIN User U ON U.login=f.friend1 WHERE F.friend2=?",
+            params=(user.login,), opts=FetchAll)
 
     @staticmethod
     @return_users
@@ -126,10 +118,11 @@ class FriendDAO(DAO):
             query="SELECT U.login, U.password, U.status FROM FRIEND F JOIN User U ON U.login=F.friend2 WHERE F.friend1=? ",
             params=(user.login,), opts=FetchAll)
 
-
     @staticmethod
+    @transaction
     def remove_friends(user, friend, conn=None):
         conn.exec(query="DELETE FROM Friend WHERE friend1=? AND friend2=?", params=(user.login, friend.login))
+
 
 class UserDAO(DAO):
     @staticmethod
@@ -139,7 +132,8 @@ class UserDAO(DAO):
 
     @staticmethod
     def _create_user(user):
-        return User(login=user[0], password=user[1], status=user[2], friends=DBList(func=FriendDAO.get_friends, user=User(login=user[0])))
+        return User(login=user[0], password=user[1], status=user[2],
+                    friends=DBList(func=FriendDAO.get_friends, user=User(login=user[0])))
 
     @staticmethod
     @transaction
@@ -152,13 +146,13 @@ class UserDAO(DAO):
 
     @staticmethod
     @transaction
-    def change_status(user,conn=None):
+    def change_status(user, conn=None):
         conn.exec(query="UPDATE User SET status=? WHERE login=?", params=(user.status, user.login), opts=FetchNone)
 
     @staticmethod
     @transaction
     def get_user(login, conn=None):
-        user = conn.exec(query="SELECT login, password, status FROM User WHERE login=?", params=(login,),opts=FetchOne)
+        user = conn.exec(query="SELECT login, password, status FROM User WHERE login=?", params=(login,), opts=FetchOne)
         if user is None:
             return None
         else:
@@ -175,7 +169,7 @@ class UserDAO(DAO):
         conn.begin_transaction(exclusive=True)
         user = conn.exec(query="SELECT login,password, status FROM User WHERE login=?;", params=(login,), opts=FetchOne)
         if user is None:
-            user = UserDAO._create_user(user=(login,password,''))
+            user = UserDAO._create_user(user=(login, password, ''))
             conn.exec("INSERT INTO User(login, password) VALUES (?,?);", params=(login, password), opts=InsertOne)
             conn.commit()
             return user
@@ -186,7 +180,8 @@ class UserDAO(DAO):
     @staticmethod
     @transaction
     def login(login, password, conn=None):
-        user = conn.exec("SELECT login, password, status FROM User WHERE login=? AND password=?;", params=(login, password), opts=FetchOne)
+        user = conn.exec("SELECT login, password, status FROM User WHERE login=? AND password=?;",
+                         params=(login, password), opts=FetchOne)
         if user is None:
             return None
         else:
@@ -197,14 +192,6 @@ class UserDAO(DAO):
     @return_users
     @transaction
     def find_users(login, excluded_login='', conn=None):
-        return conn.exec(query="SELECT login, password, status FROM User WHERE login LIKE (?|| '%') AND LOGIN != ? AND LOGIN NOT IN(SELECT friend2 FROM FRIEND WHERE friend1=?)", params=(login, excluded_login, excluded_login), opts=FetchAll)
-
-
-    '''@staticmethod
-    @transaction
-    def get_user(login, conn=None):
-        user = conn.exec(query="SELECT login, password FROM User WHERE login=?", params=(login,), opts=FetchOne)
-        if user is not None:
-            return UserDAO._create_user(user)
-        else:
-            return None'''
+        return conn.exec(
+            query="SELECT login, password, status FROM User WHERE login LIKE (?|| '%') AND LOGIN != ? AND LOGIN NOT IN(SELECT friend2 FROM FRIEND WHERE friend1=?)",
+            params=(login, excluded_login, excluded_login), opts=FetchAll)

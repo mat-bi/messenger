@@ -22,7 +22,7 @@ $(document).ready(function () {
         socket.send(JSON.stringify({"type" : 9}));
     });
 
-    $("#add_friend_text").on('input',function () {
+    $("#add_friend_text").on('blur',function () {
        var user = $(this).val();
         socket.send(JSON.stringify({"type": 7, "login": user}))
     });

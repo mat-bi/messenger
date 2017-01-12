@@ -10,11 +10,12 @@ from dto import Message
 import threading
 from abc import ABC, abstractmethod
 
+
 class MessageTypes(enum.Enum):
     LOGIN = 0
     REGISTER = 1
     INCOMING_MESSAGE = 2
-    #UNRECOGNIZED_MESSAGE = 3
+    # UNRECOGNIZED_MESSAGE = 3
     CHANGE_STATUS = 4
     ADD_FRIEND = 5
     REMOVE_FRIEND = 6
@@ -22,7 +23,6 @@ class MessageTypes(enum.Enum):
     FETCH_FRIENDS = 8
     LOGGED_USER = 9
     LOGOUT = 100
-
 
 
 class MessageCodes(enum.Enum):
@@ -46,6 +46,7 @@ class MessageCodes(enum.Enum):
     CANNOT_ADD_ITSELF = 17
     ACCESS_RESTRICTED = 50
     LOGGED_OUT = 100
+
 
 class InvalidMessage(Exception):
     pass
@@ -107,6 +108,7 @@ class Controller(ABC):
     def context(self):
         return self._context
 
+
 class LoginObject:
     def __init__(self, login=None, content=None):
         self._content = content
@@ -147,8 +149,10 @@ class ReturnView:
         self.fields = kwargs
         self.__dict__.update(kwargs)
 
+
 class AccessRestricted(Exception):
     pass
+
 
 def logged(func):
     def func_wrapper(self, *args, **kwargs):
@@ -157,7 +161,9 @@ def logged(func):
         else:
             raise AccessRestricted()
         return f
+
     return func_wrapper
+
 
 def unlogged(func):
     def func_wrapper(self, *args, **kwargs):
@@ -166,7 +172,9 @@ def unlogged(func):
         else:
             raise AccessRestricted()
         return f
+
     return func_wrapper
+
 
 class LoggedInController(Controller):
     @unlogged
@@ -177,16 +185,17 @@ class LoggedInController(Controller):
         else:  # DB returned a row
             friends = [{"login": friend.login, "status": friend.status,
                         "state": Socket().get_state(login=friend.login).value} for friend in
-                        user.friends]  # gets all friends of the current user
+                       user.friends]  # gets all friends of the current user
             logins = [user.login for user in
-                        dao.FriendDAO.get_users_added_as_friend(user=dto.User(
-                              login=login))]  # gets all the users that added the current user as a friend
+                      dao.FriendDAO.get_users_added_as_friend(user=dto.User(
+                          login=login))]  # gets all the users that added the current user as a friend
             Socket().add_observer(login=logins,
-                                      observer=self.context)  # the socket object has the list of current connected users, we use it to connect the objects in the observator pattern
+                                  observer=self.context)  # the socket object has the list of current connected users, we use it to connect the objects in the observator pattern
             self.login.log_in(login=login)
             Socket().add_user(user=user, leaf=self.context)
             return ReturnView(type=MessageCodes.LOGGED_IN,
                               friends=friends)  # writes a message to the client, to inform it that the log-in was successful
+
 
 class RegisterController(Controller):
     @unlogged
@@ -203,6 +212,7 @@ class RegisterController(Controller):
             Socket().add_user(user=user, leaf=self.context)
             return ReturnView(type=MessageCodes.USER_REGISTERED)
 
+
 class IncomingMessageController(Controller):
     @logged
     def action(self, content):
@@ -213,15 +223,16 @@ class IncomingMessageController(Controller):
                           user=DBObject(func=dao.UserDAO.get_user, login=self.login.login))
         message = dao.MessageDAO.add_message(message=message)
         Socket().send_message(ReturnView(type=MessageCodes.INCOMING_MESSAGE,
-            message= {
-                "user": message.user.login,
-                "creation_date": message.creation_date.timestamp(),
-                "content": message.content,
-                "id_message": message.id_message
-            }
-        ), sender=self.context)
+                                         message={
+                                             "user": message.user.login,
+                                             "creation_date": message.creation_date.timestamp(),
+                                             "content": message.content,
+                                             "id_message": message.id_message
+                                         }
+                                         ), sender=self.context)
         return ReturnView(type=MessageCodes.MESSAGE_RECEIVED,
                           id_message=message.id_message)
+
 
 class ChangeStatusController(Controller):
     @logged
@@ -234,6 +245,7 @@ class ChangeStatusController(Controller):
                 "status": status
             }))
         return None
+
 
 class AddFriendController(Controller):
     @logged
@@ -268,6 +280,7 @@ class AddFriendController(Controller):
         finally:
             connection.ConnectionPool.release_connection(conn=conn)
 
+
 class RemoveFriendController(Controller):
     @logged
     def action(self, login):
@@ -276,12 +289,6 @@ class RemoveFriendController(Controller):
         Socket().remove_observer(login=login, observer=self.context)
         return None
 
-class RemoveUserController(Controller):
-    @logged
-    def action(self, login):
-        dao.FriendDAO.remove_friends(user=dto.User(login=self.login.login),
-                                     friend=dto.User(login=login))
-        Socket().remove_observer(login=login, observer=self.context)
 
 class FindUsersController(Controller):
     @logged
@@ -293,6 +300,7 @@ class FindUsersController(Controller):
         else:
             return ReturnView(type=MessageCodes.USERS_FOUND, users=users)
 
+
 class FetchFriendsController(Controller):
     @logged
     def action(self):
@@ -300,6 +308,7 @@ class FetchFriendsController(Controller):
             {"login": user.login, "status": user.status, "state": Socket().get_state(user.login).value}
             for user in dao.FriendDAO.get_friends(user=dto.User(login=self.login.login))]
         return ReturnView(type=MessageCodes.FRIENDS_FETCHED, friends=friends)
+
 
 class LoggedUserController(Controller):
     @logged
@@ -310,11 +319,13 @@ class LoggedUserController(Controller):
             "status": user.status
         })
 
+
 class LogOutController(Controller):
     @logged
     def action(self):
         self.login.logout()
         return ReturnView(type=MessageTypes.LOGOUT)
+
 
 controllers = {
     MessageTypes.LOGIN: LoggedInController,
@@ -328,7 +339,6 @@ controllers = {
     MessageTypes.LOGOUT: LogOutController,
     MessageTypes.FETCH_FRIENDS: FetchFriendsController
 }
-
 
 
 class UserLeaf(User, websocket.WebSocketHandler):
@@ -348,7 +358,7 @@ class UserLeaf(User, websocket.WebSocketHandler):
 
     def notify(self, notification):
         with self.mutex:
-            self.write_message(notification)  # send notification
+            self.write_message(json.dumps(notification))  # send notification
 
     def register_observer(self, observer):
         with self.mutex_observer:
@@ -376,32 +386,6 @@ class UserLeaf(User, websocket.WebSocketHandler):
     def _unrecognized_message(self):
         message = MessageParser.unrecognized_message()
         return message
-
-    def _no_login_or_password(self, message):
-        if 'login' not in message or 'password' not in message:  # it means that the message is incomplete, the server cannot accept it
-            with self.mutex:
-                self.write_message(self._unrecognized_message())
-                return False
-        return True
-
-    def log_in(self, user):
-        self.login = user.login # the object should store the login of the current user
-        self.authenticated = True # indicator - means that there is a logged user in the current connection
-        Socket().add_user(user=user,
-                          leaf=self)  # adds the current user to the singleton, as a result the current object will be notified on every message
-
-    def message_login(self, message):
-        pass
-
-    def message_register(self, message):
-        pass
-
-
-    def message_incoming_message(self, message):
-        pass
-
-    def message_change_status(self, message):
-        pass
 
     def on_message(self, message):
         with self.mutex:
@@ -434,9 +418,6 @@ class UserLeaf(User, websocket.WebSocketHandler):
 
 
 class UserComposite(User):
-    def __len__(self):
-        with self.mutex:
-            return len(self._users)
 
     def __init__(self):
         self._users = []
@@ -477,12 +458,6 @@ class UserComposite(User):
 
 class NoUser(Exception):
     pass
-
-
-SOCKET_BUFF = 4096
-
-
-
 
 
 def singleton(cls):
@@ -548,12 +523,6 @@ class Socket(object):
                 item.add_user(user=leaf)
             self._users[user.login] = item
 
-    def _send_disconnected(self, user):
-        user.send_notification(notification=ReturnView(
-            type=MessageCodes.STATE_CHANGED,
-            state=UserState.DISCONNECTED.value,
-            login=user.login.login
-        ))
 
     def unregister_observer(self, user):
         with self.mutex:
@@ -566,7 +535,11 @@ class Socket(object):
                 raise NoUser()
             item = self._users[login]
             if isinstance(item, UserLeaf):
-                self._send_disconnected(user=user)
+                user.send_notification(notification=ReturnView(
+                    type=MessageCodes.STATE_CHANGED,
+                    state=UserState.DISCONNECTED.value,
+                    login=user.login.login
+                ))
                 del self._users[login]
             elif isinstance(item, UserComposite):
                 self._users[login] = item.remove_user(user=user)
@@ -604,6 +577,7 @@ if __name__ == "__main__":
         sys.exit(1)
     except Exception as ex:
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     dao.UserDAO.create_table()
@@ -618,5 +592,6 @@ if __name__ == "__main__":
         sys.exit(0)
     except:
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
