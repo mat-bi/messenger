@@ -70,7 +70,15 @@ $(document).ready(function () {
 
         socket.send(JSON.stringify(message));
 
-        $(".placeholder").before("<div class=\"bubble me baby-dont-break-me\">" + text + "</div>");
+        var previousDiv = $(".placeholder").prev("div");
+        if (previousDiv.hasClass('me')) {
+            var previousText = previousDiv.text();
+            previousDiv.append("<br>" + text);
+        } else {
+            $(".placeholder").before("<div class=\"bubble me baby-dont-break-me\">" + text + "</div>");
+        }
+
+        previousUser = localStorage.getItem("currentUser");
         scrollToBottom();
         $("#text").val('');
     }
@@ -149,6 +157,7 @@ $(document).ready(function () {
                 break;
             case 3:
                 toastr.success("Logged in successfully!");
+
                 $(".name").text(login);
                 $(".wrapper").show();
                 $(".module").hide();
