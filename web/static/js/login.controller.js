@@ -234,6 +234,7 @@ $(document).ready(function () {
     };
 
     socket.onclose = function (message) {
+        toastr.info("Your session has expired. Please reload page.");
         localStorage.removeItem("currentUser");
     }
 });
