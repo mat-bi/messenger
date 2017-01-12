@@ -103,7 +103,6 @@ $(document).ready(function () {
             "<li class=\"person\" id=\"person_"+login+"\" data-chat=\"person2\">" +
                 "<img src='" + getRandomImage() + "' alt=\"\"/>" +
                 "<span class=\"name\">" + login + "<br></span>" +
-                "<span class=\"time\">1:44 PM</span>" +
                 "<span class=\"preview\">" + (state == 0 ? active : disconnected) + "</span>" +
             "</li>"
         );
@@ -176,7 +175,6 @@ $(document).ready(function () {
                     "<li class=\"person\" id=\"person_" + user.login + "\" data-chat=\"person2\">" +
                     "<img src=\"" + getRandomImage() + "\"/>" +
                     "<span class=\"name\">" + user.login + "<br/></span>" +
-                    "<span class=\"time\">1:44 PM</span>" +
                     "<span class=\"preview\">" + state + "</span>" +
                     "</li>"
                 );
