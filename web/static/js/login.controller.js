@@ -22,8 +22,12 @@ $(document).ready(function () {
         socket.send(JSON.stringify({"type" : 9}));
     });
 
-    $("#add_friend_text").on('blur',function () {
+    $("#add_friend_text").on('input',function () {
        var user = $(this).val();
+        if(user.replace(/\s/g, "") == ""){
+            $("#friends_list").empty();
+            return;
+        }
         socket.send(JSON.stringify({"type": 7, "login": user}))
     });
 
@@ -207,7 +211,6 @@ $(document).ready(function () {
                 break;
             case 10:
                 $("#friends_list").empty();
-                toastr.error("No user found");
                 break;
             case 12:
                 if(previousUser === response.message.user){
