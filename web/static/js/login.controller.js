@@ -109,6 +109,15 @@ $(document).ready(function () {
         );
     };
 
+    var compare = function (a, b) {
+        if (a.state > b.state)
+            return 1;
+        else if (a.bayid < b.bayid)
+            return -1;
+        else
+            return 0;
+    };
+
     var getRandomImage = function () {
         var images = [
             "../static/img/bob.jpg",
@@ -208,9 +217,11 @@ $(document).ready(function () {
                 break;
             case 13:
                 var friends = JSON.parse(message.data).friends;
+                friends.sort(compare);
                 for(var i = 0; i < friends.length; i++) {
                     addToFriendList(friends[i].login, friends[i].state);
                 }
+                console.log(friends);
                 break;
             case 14:
                 localStorage.setItem("currentUser", JSON.parse(message.data).user.login);
