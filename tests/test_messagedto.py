@@ -29,18 +29,7 @@ class TestMessageDAO(TestCase):
         self.conn.begin_transaction()
         UserDAO.create_table(conn=self.conn)
         MessageDAO.create_table(conn=self.conn)
-
         self.conn.commit()
-
-    def test_fetch_one_message(self):
-        user = UserDAO.register(login='test', password='1234', conn=self.conn)
-        self.conn.begin_transaction()
-        message = MessageDAO.add_message(message=
-                                         Message(content='First message',
-                                                 user=DBObject(UserDAO.get_user, login=user.login, conn=self.conn)),
-                                         conn=self.conn)
-        message2 = MessageDAO.get_message(conn=self.conn, id_message=message.id_message)
-        self.assertEqual(message, message2)
 
     @transaction
     def test_create_database(self):

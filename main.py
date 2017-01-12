@@ -349,12 +349,15 @@ class UserLeaf(User, websocket.WebSocketHandler):
                     message.fields['type'] = message.type.value
                 self.write_message(message=message.fields)
 
-    def send_notification(self, notification):
+    def send_notification(self, notification, type=None):
         with self.mutex_observer:
             for observer in self.observers:  # iterate over the observers
-                if isinstance(notification.type, MessageCodes):
-                    notification.fields['type'] = notification.type.value
-                observer.notify(notification=notification.fields)  # notify the observer
+                if type == "disconnected":
+                    observer.unregister_observer(observer=self)
+                else:
+                    if isinstance(notification.type, MessageCodes):
+                        notification.fields['type'] = notification.type.value
+                    observer.notify(notification=notification.fields)  # notify the observer
 
     def notify(self, notification):
         with self.mutex:
@@ -415,6 +418,7 @@ class UserLeaf(User, websocket.WebSocketHandler):
         with self.mutex:
             if self.login.logged is True:
                 Socket().remove_user(user=self, login=self.login.login)
+            self.send_notification(notification=None, type="disconnected")
 
 
 class UserComposite(User):

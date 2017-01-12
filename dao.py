@@ -1,3 +1,4 @@
+import hashlib
 from abc import ABC, abstractstaticmethod
 from datetime import datetime
 
@@ -123,6 +124,13 @@ class FriendDAO(DAO):
     def remove_friends(user, friend, conn=None):
         conn.exec(query="DELETE FROM Friend WHERE friend1=? AND friend2=?", params=(user.login, friend.login))
 
+def hash(func):
+    def func_wrapper(*args, **kwargs):
+        password = hashlib.sha512(kwargs.get("password").encode("utf-8")).hexdigest()
+        kwargs['password'] = password
+        f = func(*args, **kwargs)
+        return f
+    return func_wrapper
 
 class UserDAO(DAO):
     @staticmethod
@@ -164,7 +172,9 @@ class UserDAO(DAO):
         users = conn.exec(query="SELECT login FROM USER WHERE login IN(?,?)", params=logins, opts=FetchAll)
         return [user[0] for user in users]
 
+
     @staticmethod
+    @hash
     def register(login, password, conn=None):
         conn.begin_transaction(exclusive=True)
         user = conn.exec(query="SELECT login,password, status FROM User WHERE login=?;", params=(login,), opts=FetchOne)
@@ -178,6 +188,7 @@ class UserDAO(DAO):
             return None
 
     @staticmethod
+    @hash
     @transaction
     def login(login, password, conn=None):
         user = conn.exec("SELECT login, password, status FROM User WHERE login=? AND password=?;",

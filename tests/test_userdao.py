@@ -18,7 +18,8 @@ class TestUserDAO(TestCase):
         self.conn.begin_transaction()
         user = UserDAO.get_user(login='test', conn=self.conn)
         self.assertEqual(user.login, 'test')
-        self.assertEqual(user.password, '1234')
+        import hashlib
+        self.assertEqual(user.password, hashlib.sha512('1234'.encode("utf-8")).hexdigest())
         self.conn.commit()
 
     def tearDown(self):
